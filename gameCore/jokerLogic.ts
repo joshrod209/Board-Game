@@ -50,7 +50,7 @@ export function wildCardAddChip(
   }
   
   // Cannot place on capped scores (unless same color, but that's unlikely with wild cards)
-  if (cell.isCapped && cell.chip !== chipColor) {
+  if (cell.isCapped && cell.chip && cell.chip !== chipColor) {
     return {
       success: false,
       error: 'Cannot place on capped score',

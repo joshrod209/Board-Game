@@ -12,6 +12,8 @@ import { isCardPlayable, burnCard } from '@/gameCore/burnRule'
 import { wildCardAddChip, wildCardRemoveChip } from '@/gameCore/jokerLogic'
 import CardComponent from './Card'
 import HandComponent from './Hand'
+import DiscardPile from './DiscardPile'
+import DiscardPileView from './DiscardPileView'
 
 export default function Board() {
   // Track current player (red starts)
@@ -54,6 +56,8 @@ export default function Board() {
   const [selectedCard, setSelectedCard] = useState<Card | null>(null) // Currently selected card for playing
   const [hasBurnedThisTurn, setHasBurnedThisTurn] = useState(false) // Track if current player has burned this turn
   const [jokerActionMode, setJokerActionMode] = useState<'add' | 'remove' | null>(null) // For joker cards: which action to take
+  const [discardPile, setDiscardPile] = useState<Card[]>([]) // Discarded cards (most recent first)
+  const [showDiscardPileView, setShowDiscardPileView] = useState(false) // Modal state for viewing full discard pile
   
   // Get all cells that have permanent capper chips (from capped scores)
   // Jokers are excluded - they're free squares and can't have cappers
@@ -170,6 +174,9 @@ export default function Board() {
       return
     }
     
+    // Add burned card to discard pile (prepend to keep most recent first)
+    setDiscardPile(prev => [removedCard, ...prev])
+    
     // Add new card to hand
     if (burnResult.newCard) {
       currentHand.addCard(burnResult.newCard)
@@ -229,6 +236,47 @@ export default function Board() {
   }
   
   /**
+   * Shuffle and deal: create fresh deck, shuffle, and deal cards to players
+   * This will replace the current deck and deal fresh hands
+   */
+  const shuffleAndDeal = () => {
+    // Create new full deck
+    const newDeck = initializeDeck()
+    
+    // Shuffle the deck
+    newDeck.shuffle()
+    
+    // Create new hands for both players
+    const newRedHand = createHand()
+    const newBlueHand = createHand()
+    
+    // Deal INITIAL_HAND_SIZE cards to each player
+    for (let i = 0; i < INITIAL_HAND_SIZE; i++) {
+      const redCard = newDeck.draw()
+      const blueCard = newDeck.draw()
+      
+      if (redCard) {
+        newRedHand.addCard(redCard)
+      }
+      if (blueCard) {
+        newBlueHand.addCard(blueCard)
+      }
+    }
+    
+    // Update state
+    setDeck(newDeck)
+    setRedHand(newRedHand)
+    setBlueHand(newBlueHand)
+    setSelectedCard(null) // Clear any selected card
+    setDiscardPile([]) // Clear discard pile (fresh start)
+    
+    console.log('Shuffled and dealt:')
+    console.log(`  Red hand: ${newRedHand.cards.length} cards`)
+    console.log(`  Blue hand: ${newBlueHand.cards.length} cards`)
+    console.log(`  Deck remaining: ${newDeck.cards.length} cards`)
+  }
+  
+  /**
    * Initialize game: create deck, shuffle, and deal initial hands
    */
   const initializeGame = () => {
@@ -260,6 +308,7 @@ export default function Board() {
     setSelectedCard(null) // Clear any selected card
     setHasBurnedThisTurn(false) // Reset burn status
     setJokerActionMode(null) // Reset joker action mode
+    setDiscardPile([]) // Reset discard pile
     
     // Debug: log hands for verification
     console.log('Game initialized:')
@@ -648,6 +697,9 @@ export default function Board() {
         return
       }
       
+      // Add card to discard pile (prepend to keep most recent first)
+      setDiscardPile(prev => [removedCard, ...prev])
+      
       // Update hand state
       const updatedHand = createHand()
       updatedHand.cards = [...currentHand.cards]
@@ -698,6 +750,9 @@ export default function Board() {
         console.error('Failed to remove card from hand')
         return
       }
+      
+      // Add card to discard pile (prepend to keep most recent first)
+      setDiscardPile(prev => [removedCard, ...prev])
       
       // Update hand state
       const updatedHand = createHand()
@@ -763,6 +818,9 @@ export default function Board() {
           return
         }
         
+        // Add card to discard pile (prepend to keep most recent first)
+        setDiscardPile(prev => [removedCard, ...prev])
+        
         // Update hand state
         const updatedHand = createHand()
         updatedHand.cards = [...currentHand.cards]
@@ -815,6 +873,9 @@ export default function Board() {
           console.error('Failed to remove card from hand')
           return
         }
+        
+        // Add card to discard pile (prepend to keep most recent first)
+        setDiscardPile(prev => [removedCard, ...prev])
         
         // Update hand state
         const updatedHand = createHand()
@@ -877,6 +938,9 @@ export default function Board() {
       console.error('Failed to remove card from hand')
       return
     }
+    
+    // Add card to discard pile (prepend to keep most recent first)
+    setDiscardPile(prev => [removedCard, ...prev])
     
     // Update hand state to trigger re-render (hand now has card removed)
     const updatedHand = createHand()
@@ -1079,19 +1143,49 @@ export default function Board() {
         </div>
       </div>
 
-      {/* Current player's hand */}
-      <HandComponent
-        hand={getCurrentPlayerHand()}
-        selectedCardId={selectedCard?.id || null}
-        onCardSelect={handleCardSelect}
-        onBurnCard={handleBurnCard}
-        onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
-        disabled={!!capMode || !!winner}
-        playerColor={currentPlayer === 'red' || currentPlayer === 'blue' ? currentPlayer : 'red'}
-        canBurn={selectedCard ? !isCardPlayable(selectedCard, board) : false}
-        hasBurned={hasBurnedThisTurn}
-        selectedCard={selectedCard}
-        jokerActionMode={jokerActionMode}
+      {/* Current player's hand and discard pile */}
+      <div className="flex gap-4 items-start">
+        <div className="flex-1">
+          <HandComponent
+            hand={getCurrentPlayerHand()}
+            selectedCardId={selectedCard?.id || null}
+            onCardSelect={handleCardSelect}
+            onBurnCard={handleBurnCard}
+            onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
+            disabled={!!capMode || !!winner}
+            playerColor={currentPlayer === 'red' || currentPlayer === 'blue' ? currentPlayer : 'red'}
+            canBurn={selectedCard ? !isCardPlayable(selectedCard, board) : false}
+            hasBurned={hasBurnedThisTurn}
+            selectedCard={selectedCard}
+            jokerActionMode={jokerActionMode}
+          />
+        </div>
+        <div className="flex-shrink-0 flex flex-col gap-2">
+          {/* Shuffle and Deal button - show when deck is empty or both players have zero cards */}
+          {(!deck || 
+            deck.cards.length === 0 || 
+            ((redHand?.cards.length === 0 && blueHand?.cards.length === 0))) && (
+            <button
+              onClick={shuffleAndDeal}
+              disabled={!!capMode || !!winner}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors shadow-lg"
+              title="Shuffle the deck and deal 5 cards to each player"
+            >
+              🔀 Shuffle & Deal
+            </button>
+          )}
+          <DiscardPile
+            discardPile={discardPile}
+            onClick={() => setShowDiscardPileView(true)}
+          />
+        </div>
+      </div>
+      
+      {/* Discard Pile View Modal */}
+      <DiscardPileView
+        discardPile={discardPile}
+        isOpen={showDiscardPileView}
+        onClose={() => setShowDiscardPileView(false)}
       />
 
       {/* New Game button - appears after Review Board is clicked */}
@@ -1124,10 +1218,9 @@ export default function Board() {
               setStartingPlayer(nextStartingPlayer)
               setCurrentPlayer(nextStartingPlayer)
               setWinner(null)
-              // Reinitialize deck and hands
+              setShowDiscardPileView(false) // Close discard pile view if open
+              // Reinitialize deck and hands (this will also reset discard pile)
               initializeGame()
-              // Reset burn status
-              setHasBurnedThisTurn(false)
               // Reset burn status
               setHasBurnedThisTurn(false)
             }}
@@ -1380,7 +1473,8 @@ export default function Board() {
                     setCurrentPlayer(nextStartingPlayer)
                     setWinner(null)
                     setShowWinnerModal(false)
-                    // Reinitialize deck and hands
+                    setShowDiscardPileView(false) // Close discard pile view if open
+                    // Reinitialize deck and hands (this will also reset discard pile)
                     initializeGame()
                   }}
                   className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"

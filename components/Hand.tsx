@@ -45,7 +45,7 @@ export default function Hand({
       <div className="mb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className={`text-sm font-bold ${playerColor === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
-            {playerColor.toUpperCase()} Player's Hand ({hand.cards.length} cards)
+            {playerColor.toUpperCase()} Player&apos;s Hand ({hand.cards.length} cards)
           </h3>
           <div className="flex gap-2">
             {/* Joker action buttons */}
