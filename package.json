@@ -1,7 +1,21 @@
 {
   "name": "quad-sequence",
   "version": "0.1.0",
+  "description": "A custom Sequence-style board game with strategic gameplay",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joshrod209/Board-Game.git"
+  },
+  "keywords": [
+    "board-game",
+    "sequence",
+    "strategy",
+    "nextjs",
+    "react",
+    "typescript"
+  ],
+  "author": "Josh Rod",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
