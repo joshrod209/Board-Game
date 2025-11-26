@@ -1,0 +1,887 @@
+'use client'
+
+import { useState } from 'react'
+import type { Cell, ChipColor, Score } from '@/gameCore/types'
+import { BOARD_SIZE } from '@/gameCore/constants'
+import { boardLayout } from '@/gameCore/boardLayout'
+import { detectScores, capScore, checkWinCondition, validateCappedChipsInScore, validateConsecutiveLine } from '@/gameCore/scoreDetection'
+import Card from './Card'
+
+export default function Board() {
+  // Track current player (red starts)
+  const [currentPlayer, setCurrentPlayer] = useState<ChipColor>('red')
+  // Track starting player for alternating games
+  const [startingPlayer, setStartingPlayer] = useState<ChipColor>('red')
+  
+  // Initialize board state from boardLayout data structure
+  // Creates a deep copy to avoid mutating the original boardLayout
+  const [board, setBoard] = useState<Cell[][]>(() =>
+    boardLayout.map(row =>
+      row.map(cell => ({
+        id: cell.id,
+        row: cell.row,
+        col: cell.col,
+        rank: cell.rank,
+        suit: cell.suit,
+        isCorner: cell.isCorner,
+        isRoyalBelt: cell.isRoyalBelt,
+        chip: null, // No chips placed initially
+        isCapped: cell.isCapped ?? false,
+        scoreIds: cell.scoreIds || [], // Track which scores this cell belongs to
+      }))
+    )
+  )
+  
+  // Track capped scores and cap mode
+  const [cappedScores, setCappedScores] = useState<Score[]>([])
+  const [capMode, setCapMode] = useState<ChipColor | null>(null) // Which player is in cap mode
+  const [selectedCapCells, setSelectedCapCells] = useState<Array<{ row: number; col: number }>>([]) // Cells selected for capping
+  
+  // Track winner state
+  const [winner, setWinner] = useState<ChipColor | null>(null)
+  const [showWinnerModal, setShowWinnerModal] = useState(false)
+  
+  // Get all cells that have permanent capper chips (from capped scores)
+  // Jokers are excluded - they're free squares and can't have cappers
+  const getPermanentCapperCells = (): Map<string, ChipColor> => {
+    const permanentCappers = new Map<string, ChipColor>()
+    cappedScores.forEach(score => {
+      if (score.isCapped) {
+        score.cells.forEach(cell => {
+          // Check if this cell is a joker - jokers can't have cappers
+          const boardCell = board[cell.row]?.[cell.col]
+          if (boardCell && !boardCell.isCorner) {
+            permanentCappers.set(`${cell.row},${cell.col}`, score.color)
+          }
+        })
+      }
+    })
+    return permanentCappers
+  }
+  
+  const permanentCappers = getPermanentCapperCells()
+  
+  const handleCellClick = (row: number, col: number) => {
+    // If in cap mode, add this cell to selection
+    if (capMode) {
+      const cell = board[row][col]
+      
+      // Jokers can be selected as part of a score line (count as 5th position)
+      // But they won't get chips or cappers placed on them
+      if (cell.isCorner) {
+        // Jokers are free squares - allow selection but they won't get cappers
+        console.log('Joker selected for score line:', row, col)
+        // Continue to selection logic below
+      } else {
+        // For non-joker cells, check if they're capped or have chips
+        // Allow selection of capped cells of the same color (for additional scores)
+        // Only block capped cells of different colors
+        if (permanentCappers.has(`${row},${col}`)) {
+          const cappedColor = permanentCappers.get(`${row},${col}`)
+          if (cappedColor !== capMode) {
+            return // Can't select capped cells of different colors
+          }
+          // Same color capped cells can be selected if they create a valid score
+          console.log('Capped cell selected for additional score:', row, col, 'color:', capMode)
+        }
+        
+        // Must have a chip of the cap mode color
+        // Note: cells with chips of OTHER colors can't be selected (they belong to other players)
+        // Capped cells of the same color are already handled above
+        const hasValidChip = (cell.chip === capMode)
+        
+        if (!hasValidChip) {
+          console.log('Cell rejected for cap mode:', row, col, 'chip:', cell.chip, 'capMode:', capMode)
+          return // Can't cap cells without matching chip
+        }
+      }
+      
+      console.log('Cell accepted for cap mode:', row, col, 'chip:', cell.chip, 'capMode:', capMode, 'isCapped:', cell.isCapped)
+      
+      // Check if cell already selected
+      const isAlreadySelected = selectedCapCells.some(
+        c => c.row === row && c.col === col
+      )
+      
+      if (isAlreadySelected) {
+        // Remove from selection if already selected
+        setSelectedCapCells(prev => prev.filter(
+          c => !(c.row === row && c.col === col)
+        ))
+      } else {
+        // Before adding, check if this would result in more than 2 capped chips
+        // Count how many capped chips are already selected
+        const currentlySelectedCappedCount = selectedCapCells.filter(({ row: r, col: c }) => {
+          const cell = board[r][c]
+          return cell?.isCapped && cell?.chip === capMode
+        }).length
+        
+        // If this new cell is capped, check rules
+        if (cell.isCapped && cell.chip === capMode) {
+          if (currentlySelectedCappedCount >= 2) {
+            console.log('Cannot select more than 2 capped chips per score. Already have', currentlySelectedCappedCount, 'capped chips selected.')
+            return // Block selection - max 2 capped chips allowed
+          }
+          
+          // If this is the second capped chip, verify it comes from a different score
+          if (currentlySelectedCappedCount === 1) {
+            // Find the first capped chip's scores
+            const firstCappedCell = selectedCapCells.find(({ row: r, col: c }) => {
+              const cell = board[r][c]
+              return cell?.isCapped && cell?.chip === capMode
+            })
+            
+            if (firstCappedCell) {
+              const firstCappedScores = cappedScores.filter(score => 
+                score.color === capMode && 
+                score.isCapped &&
+                score.cells.some(c => c.row === firstCappedCell.row && c.col === firstCappedCell.col)
+              )
+              
+              const secondCappedScores = cappedScores.filter(score => 
+                score.color === capMode && 
+                score.isCapped &&
+                score.cells.some(c => c.row === row && c.col === col)
+              )
+              
+              // Check if they share any scores
+              const firstScoreIds = new Set(firstCappedScores.map(s => s.id))
+              const secondScoreIds = new Set(secondCappedScores.map(s => s.id))
+              const sharedScores = Array.from(firstScoreIds).filter(id => secondScoreIds.has(id))
+              
+              if (sharedScores.length > 0) {
+                console.log('Cannot select two capped chips from the same score. They must come from different scores.')
+                console.log('  First capped cell scores:', Array.from(firstScoreIds))
+                console.log('  Second capped cell scores:', Array.from(secondScoreIds))
+                console.log('  Shared scores:', sharedScores)
+                return // Block - must be from different scores
+              }
+              
+              console.log('Second capped chip is from a different score - allowed')
+            }
+          }
+        }
+        
+        // Add to selection
+        const newSelection = [...selectedCapCells, { row, col }]
+        setSelectedCapCells(newSelection)
+        
+        // If we have 5 cells, check if they form a valid score
+        if (newSelection.length === 5) {
+          // First, validate that the 5 selected cells form a consecutive line
+          const validatedScore = validateConsecutiveLine(newSelection, board, capMode)
+          
+          if (!validatedScore) {
+            console.log('Selected cells do not form a valid consecutive line')
+            return // Invalid selection - not a consecutive line
+          }
+          
+          console.log('Valid consecutive line detected:', validatedScore.direction)
+          
+          // Now check for all possible scores that these cells could form
+          // (for double/triple/quad detection)
+          // This will find ALL scores including those using capped chips of the same color
+          // Pass cappedScores to validate capped chip rules (max 1 capped chip)
+          const allScores = detectScores(board, capMode, cappedScores)
+          
+          console.log('All scores detected for', capMode, ':', allScores.length, 'scores')
+          allScores.forEach(score => {
+            console.log('  Score:', score.direction, 'cells:', score.cells.map(c => `${c.row},${c.col}`).join(','))
+          })
+          
+          // Find all scores that match the selected cells exactly (same cells, any direction)
+          const matchingScores = allScores.filter(score => {
+            // Check if all 5 selected cells match this score
+            const scoreCellIds = score.cells.map(c => `${c.row},${c.col}`).sort()
+            const selectedCellIds = newSelection.map(c => `${c.row},${c.col}`).sort()
+            
+            // Check if arrays match (same cells)
+            if (scoreCellIds.length !== selectedCellIds.length) return false
+            for (let i = 0; i < scoreCellIds.length; i++) {
+              if (scoreCellIds[i] !== selectedCellIds[i]) return false
+            }
+            
+            // Check if this exact score (same cells + direction) is already capped
+            const isAlreadyCapped = cappedScores.some(capped => {
+              if (capped.id === score.id) return true
+              if (capped.color !== score.color || capped.direction !== score.direction) return false
+              if (!capped.isCapped) return false
+              const cappedCellIds = capped.cells.map(c => `${c.row},${c.col}`).sort()
+              const scoreCellIds = score.cells.map(c => `${c.row},${c.col}`).sort()
+              return cappedCellIds.length === scoreCellIds.length && 
+                     cappedCellIds.every((id, i) => id === scoreCellIds[i])
+            })
+            
+            if (isAlreadyCapped) {
+              console.log('Score already capped:', score.direction)
+              return false
+            }
+            
+            // For double/triple/quad: if all cells are capped from the same selection,
+            // allow it (they're sharing cells from the same score set)
+            const allCellsCapped = score.cells.every(({ row, col }) => {
+              const cell = board[row][col]
+              return cell?.isCapped === true
+            })
+            
+            // If all cells are capped, check if they're from scores of the same color
+            // (meaning they're part of a double/triple/quad from the same selection)
+            if (allCellsCapped) {
+              const cellScoreIds = new Set<string>()
+              score.cells.forEach(({ row, col }) => {
+                const cell = board[row][col]
+                cell?.scoreIds.forEach(id => cellScoreIds.add(id))
+              })
+              
+              // Check if all capped cells belong to scores of the same color
+              const relatedScores = cappedScores.filter(s => 
+                cellScoreIds.has(s.id) && s.color === capMode
+              )
+              
+              console.log('All cells capped, related scores:', relatedScores.length, 'for', score.direction)
+              
+              // If all cells are capped from scores of the same color, allow it
+              // (this is a double/triple/quad scenario - shared cells can be reused)
+              return relatedScores.length > 0
+            }
+            
+            // Otherwise, use normal validation (max 2 capped chips from different scores)
+            const isValid = validateCappedChipsInScore(score, board, cappedScores)
+            console.log('Score validation for', score.direction, ':', isValid)
+            return isValid
+          })
+          
+          // Always include the validated score if it's not already in matchingScores
+          const validatedScoreInList = matchingScores.some(s => 
+            s.direction === validatedScore.direction &&
+            s.cells.every((c, i) => c.row === validatedScore.cells[i].row && c.col === validatedScore.cells[i].col)
+          )
+          
+          if (!validatedScoreInList) {
+            matchingScores.push(validatedScore)
+          }
+          
+          // Score counting logic:
+          // - 1 matching score = counts as 1 score (single)
+          // - 2 matching scores = counts as 2 scores (double - same cells form 2 different lines)
+          // - 3 matching scores = counts as 3 scores (triple - same cells form 3 different lines)
+          // - 4 matching scores = counts as 4 scores (quad - same cells form 4 different lines)
+          // Each capped score counts toward the win condition (need 4 total)
+          
+          console.log('Matching scores found:', matchingScores.length, matchingScores.map(s => s.direction))
+          
+          if (matchingScores.length > 0) {
+            // Remove any scores that are already capped to avoid duplicates
+            const scoresToCap = matchingScores.filter(score => {
+              // Check if this exact score (same cells, same direction) is already capped
+              return !cappedScores.some(capped => 
+                capped.id === score.id || 
+                (capped.color === score.color &&
+                 capped.direction === score.direction &&
+                 capped.cells.length === score.cells.length &&
+                 capped.cells.every((c, i) => 
+                   c.row === score.cells[i].row && c.col === score.cells[i].col
+                 ))
+              )
+            })
+            
+            // Cap all matching scores that aren't already capped
+            // Use a batch update to ensure all scores are added correctly
+            if (scoresToCap.length > 0) {
+              setBoard(prevBoard => {
+                const newBoard = prevBoard.map(r => [...r])
+                
+                // Cap all scores in the board
+                scoresToCap.forEach(score => {
+                  const scoreToCap = { ...score, isCapped: true }
+                  capScore(newBoard, scoreToCap)
+                })
+                
+                // Add all scores to capped scores in one update
+                setCappedScores(current => {
+                  const newScores = scoresToCap
+                    .map(score => ({ ...score, isCapped: true }))
+                    .filter(scoreToAdd => {
+                      // Check if this exact score already exists
+                      // For double/triple/quad: same cells but DIFFERENT directions = different scores
+                      return !current.some(capped => {
+                        // Same ID = same score
+                        if (capped.id === scoreToAdd.id) return true
+                        
+                        // Must be same color AND same direction AND same cells to be duplicate
+                        if (capped.color !== scoreToAdd.color) return false
+                        if (capped.direction !== scoreToAdd.direction) return false // Different direction = different score!
+                        if (!capped.isCapped || capped.cells.length !== scoreToAdd.cells.length) return false
+                        
+                        // Check if cells match (sort to compare regardless of order)
+                        const cappedCellIds = capped.cells.map(c => `${c.row},${c.col}`).sort()
+                        const scoreCellIds = scoreToAdd.cells.map(c => `${c.row},${c.col}`).sort()
+                        return cappedCellIds.every((id, i) => id === scoreCellIds[i])
+                      })
+                    })
+                  
+                  console.log('Capping scores:', newScores.length, 'new scores:', newScores.map(s => `${s.direction}-${s.cells.map(c => `${c.row},${c.col}`).join(',')}`))
+                  
+                  const updated = [...current, ...newScores]
+                  
+                  console.log('Total capped scores:', updated.length, 'for', capMode, ':', updated.filter(s => s.color === capMode && s.isCapped).length)
+                  
+                  // Check for win condition
+                  const detectedWinner = checkWinCondition(updated)
+                  if (detectedWinner && !winner) {
+                    // Only show winner modal once
+                    setWinner(detectedWinner)
+                    setShowWinnerModal(true)
+                  }
+                  
+                  return updated
+                })
+                
+                return newBoard
+              })
+              
+              // After capping, check if there are more valid scores available for this color
+              // This allows players to cap double/triple/quad scores in sequence
+              setCappedScores(currentCappedScores => {
+                const updatedCappedScores = [...currentCappedScores, ...scoresToCap.map(s => ({ ...s, isCapped: true }))]
+                
+                // Check for additional valid scores after state updates
+                setTimeout(() => {
+                  setBoard(currentBoard => {
+                    const allAvailableScores = detectScores(currentBoard, capMode, updatedCappedScores)
+                    
+                    // Filter out scores that are already capped
+                    const uncappedScores = allAvailableScores.filter(score => {
+                      return !updatedCappedScores.some(capped => 
+                        capped.id === score.id || 
+                        (capped.color === score.color &&
+                         capped.direction === score.direction &&
+                         capped.cells.length === score.cells.length &&
+                         capped.cells.every((c, i) => 
+                           c.row === score.cells[i].row && c.col === score.cells[i].col
+                         ))
+                      )
+                    })
+                    
+                    // Validate remaining scores
+                    const validUncappedScores = uncappedScores.filter(score => 
+                      validateCappedChipsInScore(score, currentBoard, updatedCappedScores)
+                    )
+                    
+                    console.log('Remaining valid scores after capping:', validUncappedScores.length)
+                    
+                    // If there are more valid scores, keep cap mode active
+                    // Otherwise, exit cap mode (but DON'T switch turns - player can continue their turn)
+                    // This allows players to cap missed scores from previous turns without losing their current turn
+                    if (validUncappedScores.length === 0) {
+                      setCapMode(null)
+                      console.log('Exiting cap mode - player can continue their turn to place a chip')
+                    } else {
+                      // Keep cap mode active so player can cap additional scores
+                      console.log('Keeping cap mode active for additional scores:', validUncappedScores.length)
+                    }
+                    
+                    return currentBoard
+                  })
+                }, 100) // Small delay to ensure state is updated
+                
+                return updatedCappedScores
+              })
+              
+              // Clear selection but keep cap mode if there are more scores
+              setSelectedCapCells([])
+            }
+          } else {
+            // Invalid selection - let them try again or clear manually
+          }
+        }
+      }
+      return
+    }
+    
+    // Normal chip placement
+    const cell = board[row][col]
+    
+    // Don't allow chips on joker corners (they're free squares)
+    if (cell.isCorner) {
+      return // Jokers are free squares, no chips allowed
+    }
+    
+    // Don't do anything if cell already has a chip
+    if (cell.chip) {
+      return
+    }
+    
+    // Capture current player before state update
+    const playerToPlace = currentPlayer
+    const nextPlayer: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
+    
+    // Place chip for current player
+    setBoard(prevBoard => {
+      // Create new board with updated cell
+      const newBoard = prevBoard.map((r, rIdx) => 
+        r.map((c, cIdx) => {
+          if (rIdx === row && cIdx === col) {
+            return {
+              ...c,
+              chip: playerToPlace,
+              scoreIds: c.scoreIds || []
+            }
+          }
+          return c
+        })
+      )
+      
+      return newBoard
+    })
+    
+    // Toggle turns: red → blue → red → blue
+    setCurrentPlayer(nextPlayer)
+  }
+  
+  const handleCapScore = (score: Score) => {
+    setBoard(prev => {
+      const newBoard = prev.map(r => [...r])
+      
+      // Check if this exact score (same cells AND same direction) is already capped
+      // For double/triple/quad: same cells but different directions = different scores
+      const isAlreadyCapped = cappedScores.some(capped => {
+        if (capped.id === score.id) return true
+        
+        // Must be same color, same direction, and same cells
+        if (capped.color !== score.color || capped.direction !== score.direction) {
+          return false
+        }
+        
+        if (!capped.isCapped || capped.cells.length !== score.cells.length) {
+          return false
+        }
+        
+        // Check if cells match (sort to compare regardless of order)
+        const cappedCellIds = capped.cells.map(c => `${c.row},${c.col}`).sort()
+        const scoreCellIds = score.cells.map(c => `${c.row},${c.col}`).sort()
+        
+        return cappedCellIds.every((id, i) => id === scoreCellIds[i])
+      })
+      
+      if (isAlreadyCapped) {
+        return prev // Don't cap if already capped
+      }
+      
+      // Create a mutable copy of the score to cap
+      const scoreToCap = { ...score, isCapped: true }
+      capScore(newBoard, scoreToCap)
+      
+      // Add to capped scores (only if not already there)
+      setCappedScores(current => {
+        // Check again to avoid race conditions
+        // For double/triple/quad: same cells but different directions = different scores
+        const alreadyExists = current.some(capped => {
+          if (capped.id === scoreToCap.id) return true
+          
+          // Must be same color, same direction, and same cells
+          if (capped.color !== scoreToCap.color || capped.direction !== scoreToCap.direction) {
+            return false
+          }
+          
+          if (!capped.isCapped || capped.cells.length !== scoreToCap.cells.length) {
+            return false
+          }
+          
+          // Check if cells match (sort to compare regardless of order)
+          const cappedCellIds = capped.cells.map(c => `${c.row},${c.col}`).sort()
+          const scoreCellIds = scoreToCap.cells.map(c => `${c.row},${c.col}`).sort()
+          
+          return cappedCellIds.every((id, i) => id === scoreCellIds[i])
+        })
+        
+        if (alreadyExists) {
+          return current
+        }
+        
+        const updated = [...current, scoreToCap]
+        // Check for win condition
+        const detectedWinner = checkWinCondition(updated)
+        if (detectedWinner && !winner) {
+          // Only show winner modal once
+          setWinner(detectedWinner)
+          setShowWinnerModal(true)
+        }
+        return updated
+      })
+      
+      // After capping, check if there are more valid scores available for this color
+      // This allows players to cap double/triple/quad scores in sequence
+      setCappedScores(currentCappedScores => {
+        const updatedCappedScores = [...currentCappedScores, scoreToCap]
+        
+        // Check for additional valid scores after state updates
+        setTimeout(() => {
+          setBoard(currentBoard => {
+            const allAvailableScores = detectScores(currentBoard, score.color, cappedScores)
+            
+            // Filter out scores that are already capped
+            const uncappedScores = allAvailableScores.filter(availableScore => {
+              return !updatedCappedScores.some(capped => 
+                capped.id === availableScore.id || 
+                (capped.color === availableScore.color &&
+                 capped.direction === availableScore.direction &&
+                 capped.cells.length === availableScore.cells.length &&
+                 capped.cells.every((c, i) => 
+                   c.row === availableScore.cells[i].row && c.col === availableScore.cells[i].col
+                 ))
+              )
+            })
+            
+            // Validate remaining scores
+            const validUncappedScores = uncappedScores.filter(availableScore => 
+              validateCappedChipsInScore(availableScore, currentBoard, updatedCappedScores)
+            )
+            
+            console.log('Remaining valid scores after capping (handleCapScore):', validUncappedScores.length)
+            
+            // If there are more valid scores, keep cap mode active
+            // Otherwise, exit cap mode (but DON'T switch turns - player can continue their turn)
+            // This allows players to cap missed scores from previous turns without losing their current turn
+            if (validUncappedScores.length === 0) {
+              setCapMode(null)
+              console.log('Exiting cap mode - player can continue their turn to place a chip')
+            } else {
+              // Keep cap mode active so player can cap additional scores
+              console.log('Keeping cap mode active for additional scores:', validUncappedScores.length)
+            }
+            
+            return currentBoard
+          })
+        }, 100) // Small delay to ensure state is updated
+        
+        return updatedCappedScores
+      })
+      
+      // Clear selection but keep cap mode if there are more scores
+      setSelectedCapCells([])
+      
+      return newBoard
+    })
+  }
+
+  // Count scores by color - each unique score (by direction) counts as 1
+  const scoreCounts = {
+    red: cappedScores.filter(s => s.color === 'red' && s.isCapped).length,
+    blue: cappedScores.filter(s => s.color === 'blue' && s.isCapped).length,
+    green: cappedScores.filter(s => s.color === 'green' && s.isCapped).length,
+    yellow: cappedScores.filter(s => s.color === 'yellow' && s.isCapped).length,
+  }
+  
+  // Debug: log score counts
+  console.log('Score counts:', scoreCounts, 'Total capped:', cappedScores.filter(s => s.isCapped).length)
+  console.log('Blue scores:', cappedScores.filter(s => s.color === 'blue' && s.isCapped).map(s => `${s.direction}-${s.id}`))
+
+  return (
+    <div className="w-full max-w-4xl mx-auto space-y-4">
+      {/* Score display */}
+      <div className="bg-gray-800 rounded-lg p-4 flex justify-around items-center">
+        <div className="text-center">
+          <div className="text-white font-bold text-sm mb-1">Red</div>
+          <div className="text-2xl font-bold text-red-500">{scoreCounts.red}/4</div>
+        </div>
+        <div className="text-center">
+          <div className="text-white font-bold text-sm mb-1">Blue</div>
+          <div className="text-2xl font-bold text-blue-500">{scoreCounts.blue}/4</div>
+        </div>
+        <div className="text-sm text-gray-300">Current: <span className={`font-bold ${currentPlayer === 'red' ? 'text-red-500' : 'text-blue-500'}`}>{currentPlayer}</span></div>
+      </div>
+
+      {/* New Game button - appears after Review Board is clicked */}
+      {winner && !showWinnerModal && (
+        <div className="bg-gray-800 rounded-lg p-4 flex justify-center">
+          <button
+            onClick={() => {
+              // Reset game
+              setBoard(() =>
+                boardLayout.map(row =>
+                  row.map(cell => ({
+                    id: cell.id,
+                    row: cell.row,
+                    col: cell.col,
+                    rank: cell.rank,
+                    suit: cell.suit,
+                    isCorner: cell.isCorner,
+                    isRoyalBelt: cell.isRoyalBelt,
+                    chip: null,
+                    isCapped: false,
+                    scoreIds: [],
+                  }))
+                )
+              )
+              setCappedScores([])
+              setCapMode(null)
+              setSelectedCapCells([])
+              // Alternate starting player
+              const nextStartingPlayer: ChipColor = startingPlayer === 'red' ? 'blue' : 'red'
+              setStartingPlayer(nextStartingPlayer)
+              setCurrentPlayer(nextStartingPlayer)
+              setWinner(null)
+            }}
+            className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors text-lg shadow-lg"
+          >
+            New Game
+          </button>
+        </div>
+      )}
+
+      {/* Player chip area - in front of board but outside playable area */}
+      <div className="flex justify-center items-center gap-4">
+        {/* Red chip stack */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="relative">
+            {/* Stacked red chips */}
+            <div className="w-10 h-10 rounded-full bg-red-600 border-2 border-white shadow-lg" />
+            <div className="absolute top-0 left-0 w-10 h-10 rounded-full bg-red-600 border-2 border-white shadow-lg transform translate-y-[-4px] opacity-80" />
+            <div className="absolute top-0 left-0 w-10 h-10 rounded-full bg-red-600 border-2 border-white shadow-lg transform translate-y-[-8px] opacity-60" />
+          </div>
+          <div className="text-white text-xs font-semibold">Red Chips</div>
+        </div>
+
+        {/* White chips with red circles - stacked, next to chip stack */}
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={() => {
+              if (capMode === 'red') {
+                // Exit cap mode and clear selection
+                setCapMode(null)
+                setSelectedCapCells([])
+              } else {
+                // Enter cap mode for red
+                setCapMode('red')
+                setSelectedCapCells([])
+              }
+            }}
+            className={`relative w-12 h-12 rounded-full bg-white border-2 ${capMode === 'red' ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-gray-400'} shadow-lg hover:scale-110 transition-transform cursor-pointer flex items-center justify-center group`}
+            title={capMode === 'red' ? 'Click to exit cap mode' : 'Click to enter cap mode, then select 5 cells to cap'}
+          >
+            {/* Small red circle inside white chip */}
+            <div className="w-6 h-6 rounded-full bg-red-600" />
+            
+            {/* Stacked effect - additional chips behind */}
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg transform translate-y-[-4px] opacity-80 pointer-events-none flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full bg-red-600" />
+            </div>
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg transform translate-y-[-8px] opacity-60 pointer-events-none flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full bg-red-600" />
+            </div>
+            
+            {/* Subtle glow on hover */}
+            <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-30 transition-opacity bg-red-500" />
+          </button>
+          <div className="text-white text-xs font-semibold">Red Capper</div>
+        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Blue chip stack */}
+        <div className="flex flex-col items-center gap-2">
+          <div className="relative">
+            {/* Stacked blue chips */}
+            <div className="w-10 h-10 rounded-full bg-blue-600 border-2 border-white shadow-lg" />
+            <div className="absolute top-0 left-0 w-10 h-10 rounded-full bg-blue-600 border-2 border-white shadow-lg transform translate-y-[-4px] opacity-80" />
+            <div className="absolute top-0 left-0 w-10 h-10 rounded-full bg-blue-600 border-2 border-white shadow-lg transform translate-y-[-8px] opacity-60" />
+          </div>
+          <div className="text-white text-xs font-semibold">Blue Chips</div>
+        </div>
+
+        {/* White chips with blue circles - stacked, next to chip stack */}
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={() => {
+              if (capMode === 'blue') {
+                // Exit cap mode and clear selection
+                setCapMode(null)
+                setSelectedCapCells([])
+              } else {
+                // Enter cap mode for blue
+                setCapMode('blue')
+                setSelectedCapCells([])
+              }
+            }}
+            className={`relative w-12 h-12 rounded-full bg-white border-2 ${capMode === 'blue' ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-gray-400'} shadow-lg hover:scale-110 transition-transform cursor-pointer flex items-center justify-center group`}
+            title={capMode === 'blue' ? 'Click to exit cap mode' : 'Click to enter cap mode, then select 5 cells to cap'}
+          >
+            {/* Small blue circle inside white chip */}
+            <div className="w-6 h-6 rounded-full bg-blue-600" />
+            
+            {/* Stacked effect - additional chips behind */}
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg transform translate-y-[-4px] opacity-80 pointer-events-none flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full bg-blue-600" />
+            </div>
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg transform translate-y-[-8px] opacity-60 pointer-events-none flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full bg-blue-600" />
+            </div>
+            
+            {/* Subtle glow on hover */}
+            <div className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-30 transition-opacity bg-blue-500" />
+          </button>
+          <div className="text-white text-xs font-semibold">Blue Capper</div>
+        </div>
+      </div>
+
+      {/* Cap mode indicator */}
+      {capMode && (
+        <div className="bg-yellow-900/50 border-2 border-yellow-500 rounded-lg p-2 text-center">
+          <div className="text-yellow-200 font-bold">
+            Cap Mode: {capMode.toUpperCase()} - Select 5 consecutive cells ({selectedCapCells.length}/5)
+          </div>
+          {selectedCapCells.length > 0 && (
+            <button
+              onClick={() => setSelectedCapCells([])}
+              className="mt-2 px-4 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
+            >
+              Clear Selection
+            </button>
+          )}
+        </div>
+      )}
+      
+      <div
+        className="grid gap-1 p-4 bg-gray-800 rounded-lg"
+        style={{
+          gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
+          aspectRatio: '10 / 7',
+        }}
+      >
+        {board.map((row, rowIndex) =>
+          row.map((cell, colIndex) => (
+            <button
+              key={`${rowIndex}-${colIndex}`}
+              onClick={() => handleCellClick(rowIndex, colIndex)}
+              className={`
+                rounded-md transition-all relative
+                ${cell.isCorner 
+                  ? 'ring-2 ring-yellow-400' 
+                  : ''
+                }
+                hover:scale-[1.02]
+                ${permanentCappers.has(`${rowIndex},${colIndex}`) 
+                  ? permanentCappers.get(`${rowIndex},${colIndex}`) === 'red'
+                    ? 'ring-2 ring-red-500 bg-red-500/10' 
+                    : permanentCappers.get(`${rowIndex},${colIndex}`) === 'blue'
+                    ? 'ring-2 ring-blue-500 bg-blue-500/10'
+                    : permanentCappers.get(`${rowIndex},${colIndex}`) === 'green'
+                    ? 'ring-2 ring-green-500 bg-green-500/10'
+                    : 'ring-2 ring-yellow-500 bg-yellow-500/10'
+                  : ''
+                }
+              `}
+              aria-label={`Cell ${rowIndex}, ${colIndex}`}
+              type="button"
+            >
+              {/* Card visual */}
+              <Card cell={cell} />
+              
+              {/* Chip overlay - just the colored sphere */}
+              {cell.chip && (
+                <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+                  <div className={`
+                    w-8 h-8 rounded-full border-2 border-white shadow-lg
+                    ${cell.chip === 'red' ? 'bg-red-600' : ''}
+                    ${cell.chip === 'blue' ? 'bg-blue-600' : ''}
+                    ${cell.chip === 'green' ? 'bg-green-600' : ''}
+                    ${cell.chip === 'yellow' ? 'bg-yellow-600' : ''}
+                  `} />
+                </div>
+              )}
+              
+              {/* Permanent capper chip overlay - from capped scores (always visible, unremovable) */}
+              {permanentCappers.has(`${rowIndex},${colIndex}`) && (
+                <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                  <div className="relative w-10 h-10 rounded-full bg-white border-2 border-gray-400 shadow-xl">
+                    <div className={`absolute inset-0 flex items-center justify-center`}>
+                      <div className={`w-5 h-5 rounded-full ${permanentCappers.get(`${rowIndex},${colIndex}`) === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Temporary capper chip overlay - during selection (only if not already permanently capped and not a joker) */}
+              {capMode && 
+               selectedCapCells.some(c => c.row === rowIndex && c.col === colIndex) &&
+               !permanentCappers.has(`${rowIndex},${colIndex}`) &&
+               !cell.isCorner && (
+                <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                  <div className="relative w-10 h-10 rounded-full bg-white border-2 border-gray-400 shadow-xl opacity-90">
+                    <div className={`absolute inset-0 flex items-center justify-center`}>
+                      <div className={`w-5 h-5 rounded-full ${capMode === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </button>
+          ))
+        )}
+      </div>
+      
+      {/* Winner Modal */}
+      {showWinnerModal && winner && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg p-8 max-w-md w-full mx-4 border-2 border-yellow-400 shadow-2xl">
+            <div className="text-center">
+              <h2 className="text-4xl font-bold mb-4 text-white">
+                🎉 {winner.toUpperCase()} WINS! 🎉
+              </h2>
+              <p className="text-gray-300 mb-6">
+                Congratulations! {winner.toUpperCase()} has achieved 4 capped scores!
+              </p>
+              
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => {
+                    setShowWinnerModal(false)
+                    // Keep the board state for review
+                  }}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Review Board
+                </button>
+                <button
+                  onClick={() => {
+                    // Reset game
+                    setBoard(() =>
+                      boardLayout.map(row =>
+                        row.map(cell => ({
+                          id: cell.id,
+                          row: cell.row,
+                          col: cell.col,
+                          rank: cell.rank,
+                          suit: cell.suit,
+                          isCorner: cell.isCorner,
+                          isRoyalBelt: cell.isRoyalBelt,
+                          chip: null,
+                          isCapped: false,
+                          scoreIds: [],
+                        }))
+                      )
+                    )
+                    setCappedScores([])
+                    setCapMode(null)
+                    setSelectedCapCells([])
+                    // Alternate starting player
+                    const nextStartingPlayer: ChipColor = startingPlayer === 'red' ? 'blue' : 'red'
+                    setStartingPlayer(nextStartingPlayer)
+                    setCurrentPlayer(nextStartingPlayer)
+                    setWinner(null)
+                    setShowWinnerModal(false)
+                  }}
+                  className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
+                >
+                  New Game
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
