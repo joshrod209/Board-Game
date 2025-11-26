@@ -1,11 +1,17 @@
 'use client'
 
-import { useState } from 'react'
-import type { Cell, ChipColor, Score } from '@/gameCore/types'
-import { BOARD_SIZE } from '@/gameCore/constants'
+import { useState, useEffect } from 'react'
+import type { Cell, ChipColor, Score, Deck, Hand, Card } from '@/gameCore/types'
+import { BOARD_SIZE, INITIAL_HAND_SIZE } from '@/gameCore/constants'
 import { boardLayout } from '@/gameCore/boardLayout'
 import { detectScores, capScore, checkWinCondition, validateCappedChipsInScore, validateConsecutiveLine } from '@/gameCore/scoreDetection'
-import Card from './Card'
+import { initializeDeck } from '@/gameCore/deck'
+import { createHand } from '@/gameCore/hand'
+import { canPlayCard, playCard as validatePlayCard } from '@/gameCore/playCard'
+import { isCardPlayable, burnCard } from '@/gameCore/burnRule'
+import { wildCardAddChip, wildCardRemoveChip } from '@/gameCore/jokerLogic'
+import CardComponent from './Card'
+import HandComponent from './Hand'
 
 export default function Board() {
   // Track current player (red starts)
@@ -41,6 +47,14 @@ export default function Board() {
   const [winner, setWinner] = useState<ChipColor | null>(null)
   const [showWinnerModal, setShowWinnerModal] = useState(false)
   
+  // Deck and hand state
+  const [deck, setDeck] = useState<Deck | null>(null)
+  const [redHand, setRedHand] = useState<Hand | null>(null)
+  const [blueHand, setBlueHand] = useState<Hand | null>(null)
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null) // Currently selected card for playing
+  const [hasBurnedThisTurn, setHasBurnedThisTurn] = useState(false) // Track if current player has burned this turn
+  const [jokerActionMode, setJokerActionMode] = useState<'add' | 'remove' | null>(null) // For joker cards: which action to take
+  
   // Get all cells that have permanent capper chips (from capped scores)
   // Jokers are excluded - they're free squares and can't have cappers
   const getPermanentCapperCells = (): Map<string, ChipColor> => {
@@ -60,6 +74,204 @@ export default function Board() {
   }
   
   const permanentCappers = getPermanentCapperCells()
+  
+  /**
+   * Get the current player's hand
+   */
+  const getCurrentPlayerHand = (): Hand | null => {
+    if (currentPlayer === 'red') {
+      return redHand
+    }
+    return blueHand
+  }
+  
+  /**
+   * Handle card selection from hand
+   */
+  const handleCardSelect = (card: Card) => {
+    // Only allow selecting cards if it's the current player's turn and not in cap mode
+    if (capMode) {
+      console.log('Cannot select cards while in cap mode')
+      return
+    }
+    
+    // Toggle selection - if same card, deselect it
+    if (selectedCard?.id === card.id) {
+      setSelectedCard(null)
+      setJokerActionMode(null) // Clear joker action mode when deselecting
+      console.log('Card deselected')
+    } else {
+      setSelectedCard(card)
+      // Reset joker action mode when selecting a new card
+      setJokerActionMode(null) // Will need to be set before playing joker
+      
+      // Log wild card type
+      if (card.wildCardType === 'twoEyedJack') {
+        console.log(`Card selected: ${card.rank} of ${card.suit} (Two-Eyed Jack - can place chip anywhere)`)
+      } else if (card.wildCardType === 'oneEyedJack') {
+        console.log(`Card selected: ${card.rank} of ${card.suit} (One-Eyed Jack - can remove opponent chip)`)
+      } else if (card.wildCardType === 'joker') {
+        console.log(`Card selected: ${card.rank} of ${card.suit} (Joker - choose add or remove action)`)
+      } else {
+        console.log(`Card selected: ${card.rank} of ${card.suit}`)
+      }
+    }
+  }
+  
+  /**
+   * Handle burning a card (discard unplayable card and draw new one)
+   */
+  const handleBurnCard = () => {
+    if (!selectedCard) {
+      console.log('No card selected to burn')
+      return
+    }
+    
+    if (!deck || !board) {
+      console.log('Game not initialized')
+      return
+    }
+    
+    if (hasBurnedThisTurn) {
+      console.log('You have already burned a card this turn. Only one burn per turn allowed.')
+      return
+    }
+    
+    if (capMode) {
+      console.log('Cannot burn cards while in cap mode')
+      return
+    }
+    
+    // Get current player's hand
+    const currentHand = getCurrentPlayerHand()
+    if (!currentHand || !currentHand.hasCard(selectedCard.id)) {
+      console.log('Selected card is not in your hand')
+      return
+    }
+    
+    // Validate card is unplayable
+    if (isCardPlayable(selectedCard, board)) {
+      console.log('Card is playable. Cannot burn playable cards. Play the card instead.')
+      return
+    }
+    
+    // Execute burn: remove card and draw new one
+    const burnResult = burnCard(selectedCard, board, deck)
+    
+    if (!burnResult.success) {
+      console.error(`Burn failed: ${burnResult.error}`)
+      return
+    }
+    
+    // Remove burned card from hand
+    const removedCard = currentHand.removeCard(selectedCard.id)
+    if (!removedCard) {
+      console.error('Failed to remove burned card from hand')
+      return
+    }
+    
+    // Add new card to hand
+    if (burnResult.newCard) {
+      currentHand.addCard(burnResult.newCard)
+    }
+    
+    // Update hand state to trigger re-render
+    const updatedHand = createHand()
+    updatedHand.cards = [...currentHand.cards]
+    if (currentPlayer === 'red') {
+      setRedHand(updatedHand)
+    } else {
+      setBlueHand(updatedHand)
+    }
+    
+    // Clear selected card and mark as burned this turn
+    setSelectedCard(null)
+    setHasBurnedThisTurn(true)
+    setJokerActionMode(null)
+    
+    console.log(`🔥 Burned card: ${removedCard.rank}${removedCard.suit === 'joker' ? '🃏' : removedCard.suit[0]}`)
+    if (burnResult.newCard) {
+      console.log(`   Drew new card: ${burnResult.newCard.rank}${burnResult.newCard.suit === 'joker' ? '🃏' : burnResult.newCard.suit[0]}`)
+    }
+    console.log(`   Hand now has ${updatedHand.cards.length} cards`)
+  }
+  
+  /**
+   * Draw a new card for a specific player after playing a card
+   * @param playerColor - The player to draw a card for
+   * @param currentHand - Optional: the current hand to add the card to (to avoid stale state)
+   */
+  const drawCardForPlayer = (playerColor: ChipColor, currentHand?: Hand | null) => {
+    if (!deck) return
+    
+    const newCard = deck.draw()
+    if (!newCard) {
+      console.log('Deck is empty - no more cards to draw')
+      return
+    }
+    
+    // Use provided hand or get from state
+    const hand = currentHand ?? (playerColor === 'red' ? redHand : blueHand)
+    if (hand) {
+      // Add card to hand
+      hand.addCard(newCard)
+      // Update state to trigger re-render - create new hand with new cards array reference
+      const updatedHand = createHand()
+      updatedHand.cards = [...hand.cards] // Copy cards array (includes the new card)
+      if (playerColor === 'red') {
+        setRedHand(updatedHand)
+      } else {
+        setBlueHand(updatedHand)
+      }
+      console.log(`Drew new card for ${playerColor}:`, `${newCard.rank}${newCard.suit === 'joker' ? '🃏' : newCard.suit[0]}`)
+      console.log(`  ${playerColor} hand now has ${updatedHand.cards.length} cards`)
+    }
+  }
+  
+  /**
+   * Initialize game: create deck, shuffle, and deal initial hands
+   */
+  const initializeGame = () => {
+    // Create and shuffle deck
+    const newDeck = initializeDeck()
+    newDeck.shuffle()
+    
+    // Create hands for both players
+    const newRedHand = createHand()
+    const newBlueHand = createHand()
+    
+    // Deal initial cards to each player
+    for (let i = 0; i < INITIAL_HAND_SIZE; i++) {
+      const redCard = newDeck.draw()
+      const blueCard = newDeck.draw()
+      
+      if (redCard) {
+        newRedHand.addCard(redCard)
+      }
+      if (blueCard) {
+        newBlueHand.addCard(blueCard)
+      }
+    }
+    
+    // Update state
+    setDeck(newDeck)
+    setRedHand(newRedHand)
+    setBlueHand(newBlueHand)
+    setSelectedCard(null) // Clear any selected card
+    setHasBurnedThisTurn(false) // Reset burn status
+    setJokerActionMode(null) // Reset joker action mode
+    
+    // Debug: log hands for verification
+    console.log('Game initialized:')
+    console.log(`  Red hand: ${newRedHand.cards.length} cards`, newRedHand.cards.map(c => `${c.rank}${c.suit === 'joker' ? '🃏' : c.suit[0]}`))
+    console.log(`  Blue hand: ${newBlueHand.cards.length} cards`, newBlueHand.cards.map(c => `${c.rank}${c.suit === 'joker' ? '🃏' : c.suit[0]}`))
+    console.log(`  Deck remaining: ${newDeck.cards.length} cards`)
+  }
+  
+  // Initialize game on component mount
+  useEffect(() => {
+    initializeGame()
+  }, []) // Empty dependency array - only run on mount
   
   const handleCellClick = (row: number, col: number) => {
     // If in cap mode, add this cell to selection
@@ -399,22 +611,284 @@ export default function Board() {
       return
     }
     
-    // Normal chip placement
+    // Normal chip placement - requires card selection and validation
     const cell = board[row][col]
     
-    // Don't allow chips on joker corners (they're free squares)
-    if (cell.isCorner) {
-      return // Jokers are free squares, no chips allowed
-    }
-    
-    // Don't do anything if cell already has a chip
-    if (cell.chip) {
+    // Require a selected card before placing chip
+    if (!selectedCard) {
+      const currentHand = getCurrentPlayerHand()
+      const handCards = currentHand?.cards || []
+      console.log(`⚠️ No card selected. ${currentPlayer.toUpperCase()} player's hand:`, handCards.map(c => `${c.rank}${c.suit === 'joker' ? '🃏' : c.suit[0]}`))
+      console.log(`   To select a card (temporary for Phase 3): setSelectedCard(handCards[0]) in console`)
+      console.log(`   Card selection UI coming in Phase 4`)
       return
     }
     
+    // Get current player's hand
+    const currentHand = getCurrentPlayerHand()
+    if (!currentHand || !currentHand.hasCard(selectedCard.id)) {
+      console.log('Selected card is not in your hand.')
+      setSelectedCard(null) // Clear invalid selection
+      return
+    }
+    
+    // Handle wild cards (two-eyed jack, one-eyed jack, joker)
+    if (selectedCard.wildCardType === 'twoEyedJack') {
+      // Two-eyed jack: place chip anywhere (unoccupied)
+      const addResult = wildCardAddChip(row, col, currentPlayer, board)
+      if (!addResult.success) {
+        console.log(`❌ Cannot place chip with two-eyed jack: ${addResult.error}`)
+        return
+      }
+      
+      // Remove card from hand
+      const removedCard = currentHand.removeCard(selectedCard.id)
+      if (!removedCard) {
+        console.error('Failed to remove card from hand')
+        return
+      }
+      
+      // Update hand state
+      const updatedHand = createHand()
+      updatedHand.cards = [...currentHand.cards]
+      if (currentPlayer === 'red') {
+        setRedHand(updatedHand)
+      } else {
+        setBlueHand(updatedHand)
+      }
+      
+      // Place chip
+      setBoard(prevBoard => {
+        const newBoard = prevBoard.map((r, rIdx) => 
+          r.map((c, cIdx) => {
+            if (rIdx === row && cIdx === col) {
+              return {
+                ...c,
+                chip: currentPlayer,
+                scoreIds: c.scoreIds || []
+              }
+            }
+            return c
+          })
+        )
+        return newBoard
+      })
+      
+      console.log(`🎴 Two-eyed jack played: Placed ${currentPlayer} chip at (${row}, ${col})`)
+      setSelectedCard(null)
+      setJokerActionMode(null)
+      
+      // Draw new card and CONTINUE TURN (two-eyed jack doesn't end turn)
+      drawCardForPlayer(currentPlayer, updatedHand)
+      return
+    }
+    
+    if (selectedCard.wildCardType === 'oneEyedJack') {
+      // One-eyed jack: remove opponent's uncapped chip
+      const opponentColor: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
+      const removeResult = wildCardRemoveChip(row, col, opponentColor, board)
+      if (!removeResult.success) {
+        console.log(`❌ Cannot remove chip with one-eyed jack: ${removeResult.error}`)
+        return
+      }
+      
+      // Remove card from hand
+      const removedCard = currentHand.removeCard(selectedCard.id)
+      if (!removedCard) {
+        console.error('Failed to remove card from hand')
+        return
+      }
+      
+      // Update hand state
+      const updatedHand = createHand()
+      updatedHand.cards = [...currentHand.cards]
+      if (currentPlayer === 'red') {
+        setRedHand(updatedHand)
+      } else {
+        setBlueHand(updatedHand)
+      }
+      
+      // Remove chip from board
+      setBoard(prevBoard => {
+        const newBoard = prevBoard.map((r, rIdx) => 
+          r.map((c, cIdx) => {
+            if (rIdx === row && cIdx === col) {
+              return {
+                ...c,
+                chip: null,
+                scoreIds: []
+              }
+            }
+            return c
+          })
+        )
+        return newBoard
+      })
+      
+      console.log(`🎴 One-eyed jack played: Removed ${opponentColor} chip from (${row}, ${col})`)
+      setSelectedCard(null)
+      setJokerActionMode(null)
+      
+      // Draw new card and END TURN (one-eyed jack ends turn)
+      drawCardForPlayer(currentPlayer, updatedHand)
+      const nextPlayer: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
+      setCurrentPlayer(nextPlayer)
+      setHasBurnedThisTurn(false)
+      setJokerActionMode(null)
+      return
+    }
+    
+    if (selectedCard.wildCardType === 'joker') {
+      // Joker: player must choose add or remove action
+      if (!jokerActionMode) {
+        // First click: show UI to choose action (we'll handle this below)
+        // For now, we need to prompt the user
+        console.log(`🎴 Joker selected. Choose action: Add chip or Remove opponent chip`)
+        // We'll add UI for this
+        return
+      }
+      
+      if (jokerActionMode === 'add') {
+        // Joker: add chip
+        const addResult = wildCardAddChip(row, col, currentPlayer, board)
+        if (!addResult.success) {
+          console.log(`❌ Cannot place chip with joker: ${addResult.error}`)
+          return
+        }
+        
+        // Remove card from hand
+        const removedCard = currentHand.removeCard(selectedCard.id)
+        if (!removedCard) {
+          console.error('Failed to remove card from hand')
+          return
+        }
+        
+        // Update hand state
+        const updatedHand = createHand()
+        updatedHand.cards = [...currentHand.cards]
+        if (currentPlayer === 'red') {
+          setRedHand(updatedHand)
+        } else {
+          setBlueHand(updatedHand)
+        }
+        
+        // Place chip
+        setBoard(prevBoard => {
+          const newBoard = prevBoard.map((r, rIdx) => 
+            r.map((c, cIdx) => {
+              if (rIdx === row && cIdx === col) {
+                return {
+                  ...c,
+                  chip: currentPlayer,
+                  scoreIds: c.scoreIds || []
+                }
+              }
+              return c
+            })
+          )
+          return newBoard
+        })
+        
+        console.log(`🎴 Joker played (ADD): Placed ${currentPlayer} chip at (${row}, ${col})`)
+        setSelectedCard(null)
+        setJokerActionMode(null)
+        
+        // Draw new card and END TURN (joker ends turn)
+        drawCardForPlayer(currentPlayer, updatedHand)
+        const nextPlayer: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
+        setCurrentPlayer(nextPlayer)
+        setHasBurnedThisTurn(false)
+        setJokerActionMode(null)
+        return
+      } else {
+        // Joker: remove opponent chip
+        const opponentColor: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
+        const removeResult = wildCardRemoveChip(row, col, opponentColor, board)
+        if (!removeResult.success) {
+          console.log(`❌ Cannot remove chip with joker: ${removeResult.error}`)
+          return
+        }
+        
+        // Remove card from hand
+        const removedCard = currentHand.removeCard(selectedCard.id)
+        if (!removedCard) {
+          console.error('Failed to remove card from hand')
+          return
+        }
+        
+        // Update hand state
+        const updatedHand = createHand()
+        updatedHand.cards = [...currentHand.cards]
+        if (currentPlayer === 'red') {
+          setRedHand(updatedHand)
+        } else {
+          setBlueHand(updatedHand)
+        }
+        
+        // Remove chip from board
+        setBoard(prevBoard => {
+          const newBoard = prevBoard.map((r, rIdx) => 
+            r.map((c, cIdx) => {
+              if (rIdx === row && cIdx === col) {
+                return {
+                  ...c,
+                  chip: null,
+                  scoreIds: []
+                }
+              }
+              return c
+            })
+          )
+          return newBoard
+        })
+        
+        console.log(`🎴 Joker played (REMOVE): Removed ${opponentColor} chip from (${row}, ${col})`)
+        setSelectedCard(null)
+        setJokerActionMode(null)
+        
+        // Draw new card and END TURN (joker ends turn)
+        drawCardForPlayer(currentPlayer, updatedHand)
+        const nextPlayer: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
+        setCurrentPlayer(nextPlayer)
+        setHasBurnedThisTurn(false)
+        setJokerActionMode(null)
+        return
+      }
+    }
+    
+    // Regular card: validate card can be played at this position
+    // This checks: bounds, card match, corner spaces, occupied cells, etc.
+    const validationResult = validatePlayCard(selectedCard, row, col, board)
+    if (!validationResult.success) {
+      console.log(`❌ Cannot play card: ${validationResult.error}`)
+      console.log(`  Card: ${selectedCard.rank} of ${selectedCard.suit}`)
+      console.log(`  Position: (${row}, ${col}) - ${cell.rank} of ${cell.suit}`)
+      return
+    }
+    
+    // All validation passed - proceed with chip placement
     // Capture current player before state update
     const playerToPlace = currentPlayer
     const nextPlayer: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
+    
+    // Remove card from hand
+    const removedCard = currentHand.removeCard(selectedCard.id)
+    if (!removedCard) {
+      console.error('Failed to remove card from hand')
+      return
+    }
+    
+    // Update hand state to trigger re-render (hand now has card removed)
+    const updatedHand = createHand()
+    updatedHand.cards = [...currentHand.cards] // Cards array after removal
+    if (currentPlayer === 'red') {
+      setRedHand(updatedHand)
+    } else {
+      setBlueHand(updatedHand)
+    }
+    
+    console.log(`Playing ${selectedCard.rank}${selectedCard.suit === 'joker' ? '🃏' : selectedCard.suit[0]} at (${row}, ${col})`)
+    console.log(`  Hand now has ${updatedHand.cards.length} cards (card removed)`)
     
     // Place chip for current player
     setBoard(prevBoard => {
@@ -435,8 +909,18 @@ export default function Board() {
       return newBoard
     })
     
+    // Clear selected card
+    setSelectedCard(null)
+    
+    // Draw a new card for the player who just played (before switching turns)
+    // Pass the updatedHand to avoid using stale state
+    drawCardForPlayer(playerToPlace, updatedHand)
+    
     // Toggle turns: red → blue → red → blue
     setCurrentPlayer(nextPlayer)
+    // Reset burn status and joker action mode for new player's turn
+    setHasBurnedThisTurn(false)
+    setJokerActionMode(null)
   }
   
   const handleCapScore = (score: Score) => {
@@ -586,11 +1070,29 @@ export default function Board() {
           <div className="text-2xl font-bold text-red-500">{scoreCounts.red}/4</div>
         </div>
         <div className="text-center">
+          <div className="text-sm text-gray-300 mb-1">Current</div>
+          <div className={`text-2xl font-bold ${currentPlayer === 'red' ? 'text-red-500' : 'text-blue-500'}`}>{currentPlayer}</div>
+        </div>
+        <div className="text-center">
           <div className="text-white font-bold text-sm mb-1">Blue</div>
           <div className="text-2xl font-bold text-blue-500">{scoreCounts.blue}/4</div>
         </div>
-        <div className="text-sm text-gray-300">Current: <span className={`font-bold ${currentPlayer === 'red' ? 'text-red-500' : 'text-blue-500'}`}>{currentPlayer}</span></div>
       </div>
+
+      {/* Current player's hand */}
+      <HandComponent
+        hand={getCurrentPlayerHand()}
+        selectedCardId={selectedCard?.id || null}
+        onCardSelect={handleCardSelect}
+        onBurnCard={handleBurnCard}
+        onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
+        disabled={!!capMode || !!winner}
+        playerColor={currentPlayer === 'red' || currentPlayer === 'blue' ? currentPlayer : 'red'}
+        canBurn={selectedCard ? !isCardPlayable(selectedCard, board) : false}
+        hasBurned={hasBurnedThisTurn}
+        selectedCard={selectedCard}
+        jokerActionMode={jokerActionMode}
+      />
 
       {/* New Game button - appears after Review Board is clicked */}
       {winner && !showWinnerModal && (
@@ -622,6 +1124,12 @@ export default function Board() {
               setStartingPlayer(nextStartingPlayer)
               setCurrentPlayer(nextStartingPlayer)
               setWinner(null)
+              // Reinitialize deck and hands
+              initializeGame()
+              // Reset burn status
+              setHasBurnedThisTurn(false)
+              // Reset burn status
+              setHasBurnedThisTurn(false)
             }}
             className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors text-lg shadow-lg"
           >
@@ -636,9 +1144,9 @@ export default function Board() {
         <div className="flex flex-col items-center gap-2">
           <div className="relative">
             {/* Stacked red chips */}
-            <div className="w-10 h-10 rounded-full bg-red-600 border-2 border-white shadow-lg" />
-            <div className="absolute top-0 left-0 w-10 h-10 rounded-full bg-red-600 border-2 border-white shadow-lg transform translate-y-[-4px] opacity-80" />
-            <div className="absolute top-0 left-0 w-10 h-10 rounded-full bg-red-600 border-2 border-white shadow-lg transform translate-y-[-8px] opacity-60" />
+            <div className="w-12 h-12 rounded-full bg-red-600 border-2 border-white shadow-lg" style={{ imageRendering: 'crisp-edges', backfaceVisibility: 'hidden' }} />
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-red-600 border-2 border-white shadow-lg" style={{ transform: 'translateY(-4px)', opacity: 1, imageRendering: 'crisp-edges', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }} />
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-red-600 border-2 border-white shadow-lg" style={{ transform: 'translateY(-8px)', opacity: 1, imageRendering: 'crisp-edges', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }} />
           </div>
           <div className="text-white text-xs font-semibold">Red Chips</div>
         </div>
@@ -655,6 +1163,8 @@ export default function Board() {
                 // Enter cap mode for red
                 setCapMode('red')
                 setSelectedCapCells([])
+                setSelectedCard(null) // Clear any selected card when entering cap mode
+                setJokerActionMode(null) // Clear joker action mode
               }
             }}
             className={`relative w-12 h-12 rounded-full bg-white border-2 ${capMode === 'red' ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-gray-400'} shadow-lg hover:scale-110 transition-transform cursor-pointer flex items-center justify-center group`}
@@ -664,10 +1174,10 @@ export default function Board() {
             <div className="w-6 h-6 rounded-full bg-red-600" />
             
             {/* Stacked effect - additional chips behind */}
-            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg transform translate-y-[-4px] opacity-80 pointer-events-none flex items-center justify-center">
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg pointer-events-none flex items-center justify-center" style={{ transform: 'translateY(-4px)', opacity: 1, imageRendering: 'crisp-edges', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
               <div className="w-6 h-6 rounded-full bg-red-600" />
             </div>
-            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg transform translate-y-[-8px] opacity-60 pointer-events-none flex items-center justify-center">
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg pointer-events-none flex items-center justify-center" style={{ transform: 'translateY(-8px)', opacity: 1, imageRendering: 'crisp-edges', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
               <div className="w-6 h-6 rounded-full bg-red-600" />
             </div>
             
@@ -684,9 +1194,9 @@ export default function Board() {
         <div className="flex flex-col items-center gap-2">
           <div className="relative">
             {/* Stacked blue chips */}
-            <div className="w-10 h-10 rounded-full bg-blue-600 border-2 border-white shadow-lg" />
-            <div className="absolute top-0 left-0 w-10 h-10 rounded-full bg-blue-600 border-2 border-white shadow-lg transform translate-y-[-4px] opacity-80" />
-            <div className="absolute top-0 left-0 w-10 h-10 rounded-full bg-blue-600 border-2 border-white shadow-lg transform translate-y-[-8px] opacity-60" />
+            <div className="w-12 h-12 rounded-full bg-blue-600 border-2 border-white shadow-lg" style={{ imageRendering: 'crisp-edges', backfaceVisibility: 'hidden' }} />
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-blue-600 border-2 border-white shadow-lg" style={{ transform: 'translateY(-4px)', opacity: 1, imageRendering: 'crisp-edges', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }} />
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-blue-600 border-2 border-white shadow-lg" style={{ transform: 'translateY(-8px)', opacity: 1, imageRendering: 'crisp-edges', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }} />
           </div>
           <div className="text-white text-xs font-semibold">Blue Chips</div>
         </div>
@@ -703,6 +1213,8 @@ export default function Board() {
                 // Enter cap mode for blue
                 setCapMode('blue')
                 setSelectedCapCells([])
+                setSelectedCard(null) // Clear any selected card when entering cap mode
+                setJokerActionMode(null) // Clear joker action mode
               }
             }}
             className={`relative w-12 h-12 rounded-full bg-white border-2 ${capMode === 'blue' ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-gray-400'} shadow-lg hover:scale-110 transition-transform cursor-pointer flex items-center justify-center group`}
@@ -712,10 +1224,10 @@ export default function Board() {
             <div className="w-6 h-6 rounded-full bg-blue-600" />
             
             {/* Stacked effect - additional chips behind */}
-            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg transform translate-y-[-4px] opacity-80 pointer-events-none flex items-center justify-center">
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg pointer-events-none flex items-center justify-center" style={{ transform: 'translateY(-4px)', opacity: 1, imageRendering: 'crisp-edges', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
               <div className="w-6 h-6 rounded-full bg-blue-600" />
             </div>
-            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg transform translate-y-[-8px] opacity-60 pointer-events-none flex items-center justify-center">
+            <div className="absolute top-0 left-0 w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-lg pointer-events-none flex items-center justify-center" style={{ transform: 'translateY(-8px)', opacity: 1, imageRendering: 'crisp-edges', backfaceVisibility: 'hidden', WebkitFontSmoothing: 'antialiased' }}>
               <div className="w-6 h-6 rounded-full bg-blue-600" />
             </div>
             
@@ -758,10 +1270,6 @@ export default function Board() {
               onClick={() => handleCellClick(rowIndex, colIndex)}
               className={`
                 rounded-md transition-all relative
-                ${cell.isCorner 
-                  ? 'ring-2 ring-yellow-400' 
-                  : ''
-                }
                 hover:scale-[1.02]
                 ${permanentCappers.has(`${rowIndex},${colIndex}`) 
                   ? permanentCappers.get(`${rowIndex},${colIndex}`) === 'red'
@@ -778,13 +1286,13 @@ export default function Board() {
               type="button"
             >
               {/* Card visual */}
-              <Card cell={cell} />
+              <CardComponent cell={cell} />
               
               {/* Chip overlay - just the colored sphere */}
               {cell.chip && (
                 <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
                   <div className={`
-                    w-8 h-8 rounded-full border-2 border-white shadow-lg
+                    w-10 h-10 rounded-full border-2 border-white shadow-lg
                     ${cell.chip === 'red' ? 'bg-red-600' : ''}
                     ${cell.chip === 'blue' ? 'bg-blue-600' : ''}
                     ${cell.chip === 'green' ? 'bg-green-600' : ''}
@@ -796,9 +1304,9 @@ export default function Board() {
               {/* Permanent capper chip overlay - from capped scores (always visible, unremovable) */}
               {permanentCappers.has(`${rowIndex},${colIndex}`) && (
                 <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                  <div className="relative w-10 h-10 rounded-full bg-white border-2 border-gray-400 shadow-xl">
+                  <div className="relative w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-xl" style={{ imageRendering: 'crisp-edges', backfaceVisibility: 'hidden' }}>
                     <div className={`absolute inset-0 flex items-center justify-center`}>
-                      <div className={`w-5 h-5 rounded-full ${permanentCappers.get(`${rowIndex},${colIndex}`) === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
+                      <div className={`w-6 h-6 rounded-full ${permanentCappers.get(`${rowIndex},${colIndex}`) === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
                     </div>
                   </div>
                 </div>
@@ -810,9 +1318,9 @@ export default function Board() {
                !permanentCappers.has(`${rowIndex},${colIndex}`) &&
                !cell.isCorner && (
                 <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                  <div className="relative w-10 h-10 rounded-full bg-white border-2 border-gray-400 shadow-xl opacity-90">
+                  <div className="relative w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-xl" style={{ imageRendering: 'crisp-edges', backfaceVisibility: 'hidden' }}>
                     <div className={`absolute inset-0 flex items-center justify-center`}>
-                      <div className={`w-5 h-5 rounded-full ${capMode === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
+                      <div className={`w-6 h-6 rounded-full ${capMode === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
                     </div>
                   </div>
                 </div>
@@ -872,6 +1380,8 @@ export default function Board() {
                     setCurrentPlayer(nextStartingPlayer)
                     setWinner(null)
                     setShowWinnerModal(false)
+                    // Reinitialize deck and hands
+                    initializeGame()
                   }}
                   className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors"
                 >
