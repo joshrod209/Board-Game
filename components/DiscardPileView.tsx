@@ -69,8 +69,8 @@ function DiscardCardItem({ card, index }: { card: Card; index: number }) {
               className="w-full h-full rounded-lg"
               style={isJoker ? {
                 objectFit: 'cover',
-                objectPosition: 'center center',
-                transform: isColoredJoker ? 'scale(1.12)' : 'scale(1.08)',
+                objectPosition: isColoredJoker ? 'center center' : 'center 65%', // Lower black/white jokers slightly
+                transform: isColoredJoker ? 'scale(1.12)' : 'scale(1.15)', // Slightly larger for black/white jokers to fill bottom
               } : {
                 objectFit: 'cover',
                 objectPosition: 'center center',

@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import Image from 'next/image'
 import type { Cell } from '@/gameCore/types'
 
@@ -40,7 +41,7 @@ const getSuitColor = (suit: Cell['suit']): string => {
   }
 }
 
-export default function Card({ cell, className = '' }: CardProps) {
+function Card({ cell, className = '' }: CardProps) {
   const isJoker = cell.suit === 'joker' || cell.rank === 'Joker'
   const isCornerJoker = isJoker && cell.isCorner
   const suitColor = getSuitColor(cell.suit)
@@ -116,3 +117,5 @@ export default function Card({ cell, className = '' }: CardProps) {
     </div>
   )
 }
+
+export default memo(Card)

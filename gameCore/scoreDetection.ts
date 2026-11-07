@@ -6,6 +6,7 @@
 
 import type { Cell, ChipColor, Score } from './types'
 import { BOARD_SIZE, CHIPS_IN_SCORE } from './constants'
+import { debugLog } from './debug'
 
 /**
  * Generate a unique score ID
@@ -105,7 +106,7 @@ export function detectScores(
     // Validate capped chip rules BEFORE adding to results
     // This ensures scores with too many capped chips are filtered out
     if (!validateCappedChipsInScore(score, board, cappedScores)) {
-      console.log(`detectScores: Score rejected by validation: ${score.direction} - too many capped chips`)
+      debugLog(`detectScores: Score rejected by validation: ${score.direction} - too many capped chips`)
       return
     }
     
@@ -172,7 +173,7 @@ export function validateConsecutiveLine(
   for (const { row, col } of sorted) {
     const cell = board[row]?.[col]
     if (!cell) {
-      console.log(`validateConsecutiveLine: Cell ${row},${col} is null`)
+      debugLog(`validateConsecutiveLine: Cell ${row},${col} is null`)
       return null
     }
     
@@ -191,7 +192,7 @@ export function validateConsecutiveLine(
     
     // Use cellMatchesColor for regular chips
     if (!cellMatchesColor(cell, chipColor)) {
-      console.log(`validateConsecutiveLine: Cell ${row},${col} doesn't match: chip=${cell.chip}, isCapped=${cell.isCapped}, chipColor=${chipColor}`)
+      debugLog(`validateConsecutiveLine: Cell ${row},${col} doesn't match: chip=${cell.chip}, isCapped=${cell.isCapped}, chipColor=${chipColor}`)
       return null
     }
     
@@ -200,11 +201,11 @@ export function validateConsecutiveLine(
   
   // Valid: exactly 4 chips + 1 joker, OR 5 chips (no joker)
   if (!((chipCount === 4 && jokerCount === 1) || (chipCount === 5 && jokerCount === 0))) {
-    console.log(`validateConsecutiveLine: Invalid chip/joker count: chips=${chipCount}, jokers=${jokerCount}`)
+    debugLog(`validateConsecutiveLine: Invalid chip/joker count: chips=${chipCount}, jokers=${jokerCount}`)
     return null
   }
   
-  console.log(`validateConsecutiveLine: Valid score detected - chips=${chipCount}, jokers=${jokerCount}`)
+  debugLog(`validateConsecutiveLine: Valid score detected - chips=${chipCount}, jokers=${jokerCount}`)
 
   // Check horizontal (all same row, consecutive cols)
   const isHorizontal = sorted.every((cell, i) => 
@@ -311,12 +312,12 @@ export function validateCappedChipsInScore(
     }
   }
   
-  console.log(`validateCappedChipsInScore: Score composition - ${cappedChipCount} capped, ${uncappedChipCount} uncapped, ${jokerCount} jokers`)
+  debugLog(`validateCappedChipsInScore: Score composition - ${cappedChipCount} capped, ${uncappedChipCount} uncapped, ${jokerCount} jokers`)
   
   // STRICT RULE: Max 2 capped chips allowed, but they must come from different scores
   if (cappedChipCount > 2) {
-    console.log(`validateCappedChipsInScore: INVALID - Too many capped chips: ${cappedChipCount} (max 2 allowed)`)
-    console.log(`  Capped cell positions:`, cappedCellPositions.map(c => `${c.row},${c.col}`))
+    debugLog(`validateCappedChipsInScore: INVALID - Too many capped chips: ${cappedChipCount} (max 2 allowed)`)
+    debugLog(`  Capped cell positions:`, cappedCellPositions.map(c => `${c.row},${c.col}`))
     return false
   }
   
@@ -327,7 +328,7 @@ export function validateCappedChipsInScore(
     if (total === 5) {
       return true
     }
-    console.log(`validateCappedChipsInScore: INVALID - With 0 capped chips, need 5 total. Found: ${uncappedChipCount} uncapped, ${jokerCount} jokers, total: ${total}`)
+    debugLog(`validateCappedChipsInScore: INVALID - With 0 capped chips, need 5 total. Found: ${uncappedChipCount} uncapped, ${jokerCount} jokers, total: ${total}`)
     return false
   }
   
@@ -345,8 +346,8 @@ export function validateCappedChipsInScore(
     })
     
     if (cellScores.length === 0) {
-      console.log(`validateCappedChipsInScore: INVALID - Capped cell doesn't belong to any capped score`)
-      console.log(`  Capped cell at ${cappedCellPos.row},${cappedCellPos.col} must be part of an existing capped score`)
+      debugLog(`validateCappedChipsInScore: INVALID - Capped cell doesn't belong to any capped score`)
+      debugLog(`  Capped cell at ${cappedCellPos.row},${cappedCellPos.col} must be part of an existing capped score`)
       return false
     }
     
@@ -355,19 +356,19 @@ export function validateCappedChipsInScore(
     const requiredUncappedChips = 4 - jokerCount
     
     if (uncappedChipCount !== requiredUncappedChips) {
-      console.log(`validateCappedChipsInScore: INVALID - With 1 capped chip and ${jokerCount} jokers, need exactly ${requiredUncappedChips} uncapped chips. Found: ${uncappedChipCount}`)
-      console.log(`  This ensures only 1 capped chip per existing score is used`)
+      debugLog(`validateCappedChipsInScore: INVALID - With 1 capped chip and ${jokerCount} jokers, need exactly ${requiredUncappedChips} uncapped chips. Found: ${uncappedChipCount}`)
+      debugLog(`  This ensures only 1 capped chip per existing score is used`)
       return false
     }
     
     // Verify total is 5
     const totalChips = cappedChipCount + uncappedChipCount + jokerCount
     if (totalChips !== 5) {
-      console.log(`validateCappedChipsInScore: INVALID - Total chips must be 5. Found: ${totalChips} (${cappedChipCount} capped + ${uncappedChipCount} uncapped + ${jokerCount} jokers)`)
+      debugLog(`validateCappedChipsInScore: INVALID - Total chips must be 5. Found: ${totalChips} (${cappedChipCount} capped + ${uncappedChipCount} uncapped + ${jokerCount} jokers)`)
       return false
     }
     
-    console.log(`validateCappedChipsInScore: VALID - 1 capped chip (from existing score) + ${uncappedChipCount} uncapped chips + ${jokerCount} jokers`)
+    debugLog(`validateCappedChipsInScore: VALID - 1 capped chip (from existing score) + ${uncappedChipCount} uncapped chips + ${jokerCount} jokers`)
     return true
   }
   
@@ -390,7 +391,7 @@ export function validateCappedChipsInScore(
     })
     
     if (cappedCell1Scores.length === 0 || cappedCell2Scores.length === 0) {
-      console.log(`validateCappedChipsInScore: INVALID - One or both capped cells don't belong to any capped score`)
+      debugLog(`validateCappedChipsInScore: INVALID - One or both capped cells don't belong to any capped score`)
       return false
     }
     
@@ -401,10 +402,10 @@ export function validateCappedChipsInScore(
     const sharedScores = Array.from(cell1ScoreIds).filter(id => cell2ScoreIds.has(id))
     
     if (sharedScores.length > 0) {
-      console.log(`validateCappedChipsInScore: INVALID - Both capped chips come from the same score(s)`)
-      console.log(`  Shared score IDs:`, sharedScores)
-      console.log(`  Cell 1 at ${cappedCell1Pos.row},${cappedCell1Pos.col} belongs to scores:`, Array.from(cell1ScoreIds))
-      console.log(`  Cell 2 at ${cappedCell2Pos.row},${cappedCell2Pos.col} belongs to scores:`, Array.from(cell2ScoreIds))
+      debugLog(`validateCappedChipsInScore: INVALID - Both capped chips come from the same score(s)`)
+      debugLog(`  Shared score IDs:`, sharedScores)
+      debugLog(`  Cell 1 at ${cappedCell1Pos.row},${cappedCell1Pos.col} belongs to scores:`, Array.from(cell1ScoreIds))
+      debugLog(`  Cell 2 at ${cappedCell2Pos.row},${cappedCell2Pos.col} belongs to scores:`, Array.from(cell2ScoreIds))
       return false
     }
     
@@ -412,23 +413,23 @@ export function validateCappedChipsInScore(
     const requiredUncappedChips = 3 - jokerCount
     
     if (uncappedChipCount !== requiredUncappedChips) {
-      console.log(`validateCappedChipsInScore: INVALID - With 2 capped chips and ${jokerCount} jokers, need exactly ${requiredUncappedChips} uncapped chips. Found: ${uncappedChipCount}`)
+      debugLog(`validateCappedChipsInScore: INVALID - With 2 capped chips and ${jokerCount} jokers, need exactly ${requiredUncappedChips} uncapped chips. Found: ${uncappedChipCount}`)
       return false
     }
     
     // Verify total is 5
     const totalChips = cappedChipCount + uncappedChipCount + jokerCount
     if (totalChips !== 5) {
-      console.log(`validateCappedChipsInScore: INVALID - Total chips must be 5. Found: ${totalChips} (${cappedChipCount} capped + ${uncappedChipCount} uncapped + ${jokerCount} jokers)`)
+      debugLog(`validateCappedChipsInScore: INVALID - Total chips must be 5. Found: ${totalChips} (${cappedChipCount} capped + ${uncappedChipCount} uncapped + ${jokerCount} jokers)`)
       return false
     }
     
-    console.log(`validateCappedChipsInScore: VALID - 2 capped chips (from different scores) + ${uncappedChipCount} uncapped chips + ${jokerCount} jokers`)
+    debugLog(`validateCappedChipsInScore: VALID - 2 capped chips (from different scores) + ${uncappedChipCount} uncapped chips + ${jokerCount} jokers`)
     return true
   }
   
   // Should never reach here
-  console.log(`validateCappedChipsInScore: ERROR - Unexpected capped chip count: ${cappedChipCount}`)
+  debugLog(`validateCappedChipsInScore: ERROR - Unexpected capped chip count: ${cappedChipCount}`)
   return false
 }
 

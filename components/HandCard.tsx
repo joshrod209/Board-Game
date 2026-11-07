@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import Image from 'next/image'
 import type { Card as CardType } from '@/gameCore/types'
 import { getCardImagePath } from '@/gameCore/cardImages'
@@ -44,7 +44,7 @@ const getSuitColor = (suit: CardType['suit']): string => {
   }
 }
 
-export default function HandCard({ card, isSelected, onSelect, disabled = false }: HandCardProps) {
+function HandCard({ card, isSelected, onSelect, disabled = false }: HandCardProps) {
   const [imageError, setImageError] = useState(false)
   const isJoker = card.suit === 'joker' || card.rank === 'Joker'
   const isTwoEyedJack = card.wildCardType === 'twoEyedJack'
@@ -104,10 +104,11 @@ export default function HandCard({ card, isSelected, onSelect, disabled = false 
             className="w-full h-full rounded-lg"
             style={isJoker ? {
               // For joker cards, use cover and scale to fill entire space
-              // joker_0 and joker_1 (colored jokers) need slightly larger scale to match other cards
+              // joker_0 and joker_1 (colored jokers): scale(1.12) centered
+              // joker_2 and joker_3 (black/white jokers): slightly larger scale anchored from bottom to fill bottom area
               objectFit: 'cover',
-              objectPosition: 'center center',
-              transform: isColoredJoker ? 'scale(1.12)' : 'scale(1.08)', // Slightly larger scale for colored jokers to match other cards
+              objectPosition: isColoredJoker ? 'center center' : 'center 65%', // Lower black/white jokers slightly
+              transform: isColoredJoker ? 'scale(1.12)' : 'scale(1.15)', // Slightly larger for black/white jokers to fill bottom
             } : {
               // For regular cards, use cover to fill the entire card space
               objectFit: 'cover',
@@ -230,3 +231,5 @@ export default function HandCard({ card, isSelected, onSelect, disabled = false 
   )
 }
 
+
+export default memo(HandCard)

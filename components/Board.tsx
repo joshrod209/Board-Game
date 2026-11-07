@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback, useLayoutEffect, useRef } from 'react'
 import type { Cell, ChipColor, Score, Deck, Hand, Card } from '@/gameCore/types'
 import { BOARD_SIZE, INITIAL_HAND_SIZE } from '@/gameCore/constants'
 import { boardLayout } from '@/gameCore/boardLayout'
@@ -10,7 +10,8 @@ import { createHand } from '@/gameCore/hand'
 import { canPlayCard, playCard as validatePlayCard } from '@/gameCore/playCard'
 import { isCardPlayable, burnCard } from '@/gameCore/burnRule'
 import { wildCardAddChip, wildCardRemoveChip } from '@/gameCore/jokerLogic'
-import CardComponent from './Card'
+import { debugLog } from '@/gameCore/debug'
+import BoardCell from './BoardCell'
 import HandComponent from './Hand'
 import DiscardPile from './DiscardPile'
 import DiscardPileView from './DiscardPileView'
@@ -61,7 +62,7 @@ export default function Board() {
   
   // Get all cells that have permanent capper chips (from capped scores)
   // Jokers are excluded - they're free squares and can't have cappers
-  const getPermanentCapperCells = (): Map<string, ChipColor> => {
+  const permanentCappers = useMemo((): Map<string, ChipColor> => {
     const permanentCappers = new Map<string, ChipColor>()
     cappedScores.forEach(score => {
       if (score.isCapped) {
@@ -75,9 +76,7 @@ export default function Board() {
       }
     })
     return permanentCappers
-  }
-  
-  const permanentCappers = getPermanentCapperCells()
+  }, [cappedScores, board])
   
   /**
    * Get the current player's hand
@@ -95,7 +94,7 @@ export default function Board() {
   const handleCardSelect = (card: Card) => {
     // Only allow selecting cards if it's the current player's turn and not in cap mode
     if (capMode) {
-      console.log('Cannot select cards while in cap mode')
+      debugLog('Cannot select cards while in cap mode')
       return
     }
     
@@ -103,7 +102,7 @@ export default function Board() {
     if (selectedCard?.id === card.id) {
       setSelectedCard(null)
       setJokerActionMode(null) // Clear joker action mode when deselecting
-      console.log('Card deselected')
+      debugLog('Card deselected')
     } else {
       setSelectedCard(card)
       // Reset joker action mode when selecting a new card
@@ -111,13 +110,13 @@ export default function Board() {
       
       // Log wild card type
       if (card.wildCardType === 'twoEyedJack') {
-        console.log(`Card selected: ${card.rank} of ${card.suit} (Two-Eyed Jack - can place chip anywhere)`)
+        debugLog(`Card selected: ${card.rank} of ${card.suit} (Two-Eyed Jack - can place chip anywhere)`)
       } else if (card.wildCardType === 'oneEyedJack') {
-        console.log(`Card selected: ${card.rank} of ${card.suit} (One-Eyed Jack - can remove opponent chip)`)
+        debugLog(`Card selected: ${card.rank} of ${card.suit} (One-Eyed Jack - can remove opponent chip)`)
       } else if (card.wildCardType === 'joker') {
-        console.log(`Card selected: ${card.rank} of ${card.suit} (Joker - choose add or remove action)`)
+        debugLog(`Card selected: ${card.rank} of ${card.suit} (Joker - choose add or remove action)`)
       } else {
-        console.log(`Card selected: ${card.rank} of ${card.suit}`)
+        debugLog(`Card selected: ${card.rank} of ${card.suit}`)
       }
     }
   }
@@ -127,35 +126,35 @@ export default function Board() {
    */
   const handleBurnCard = () => {
     if (!selectedCard) {
-      console.log('No card selected to burn')
+      debugLog('No card selected to burn')
       return
     }
     
     if (!deck || !board) {
-      console.log('Game not initialized')
+      debugLog('Game not initialized')
       return
     }
     
     if (hasBurnedThisTurn) {
-      console.log('You have already burned a card this turn. Only one burn per turn allowed.')
+      debugLog('You have already burned a card this turn. Only one burn per turn allowed.')
       return
     }
     
     if (capMode) {
-      console.log('Cannot burn cards while in cap mode')
+      debugLog('Cannot burn cards while in cap mode')
       return
     }
     
     // Get current player's hand
     const currentHand = getCurrentPlayerHand()
     if (!currentHand || !currentHand.hasCard(selectedCard.id)) {
-      console.log('Selected card is not in your hand')
+      debugLog('Selected card is not in your hand')
       return
     }
     
     // Validate card is unplayable
     if (isCardPlayable(selectedCard, board)) {
-      console.log('Card is playable. Cannot burn playable cards. Play the card instead.')
+      debugLog('Card is playable. Cannot burn playable cards. Play the card instead.')
       return
     }
     
@@ -196,11 +195,11 @@ export default function Board() {
     setHasBurnedThisTurn(true)
     setJokerActionMode(null)
     
-    console.log(`🔥 Burned card: ${removedCard.rank}${removedCard.suit === 'joker' ? '🃏' : removedCard.suit[0]}`)
+    debugLog(`🔥 Burned card: ${removedCard.rank}${removedCard.suit === 'joker' ? '🃏' : removedCard.suit[0]}`)
     if (burnResult.newCard) {
-      console.log(`   Drew new card: ${burnResult.newCard.rank}${burnResult.newCard.suit === 'joker' ? '🃏' : burnResult.newCard.suit[0]}`)
+      debugLog(`   Drew new card: ${burnResult.newCard.rank}${burnResult.newCard.suit === 'joker' ? '🃏' : burnResult.newCard.suit[0]}`)
     }
-    console.log(`   Hand now has ${updatedHand.cards.length} cards`)
+    debugLog(`   Hand now has ${updatedHand.cards.length} cards`)
   }
   
   /**
@@ -213,7 +212,7 @@ export default function Board() {
     
     const newCard = deck.draw()
     if (!newCard) {
-      console.log('Deck is empty - no more cards to draw')
+      debugLog('Deck is empty - no more cards to draw')
       return
     }
     
@@ -230,8 +229,8 @@ export default function Board() {
       } else {
         setBlueHand(updatedHand)
       }
-      console.log(`Drew new card for ${playerColor}:`, `${newCard.rank}${newCard.suit === 'joker' ? '🃏' : newCard.suit[0]}`)
-      console.log(`  ${playerColor} hand now has ${updatedHand.cards.length} cards`)
+      debugLog(`Drew new card for ${playerColor}:`, `${newCard.rank}${newCard.suit === 'joker' ? '🃏' : newCard.suit[0]}`)
+      debugLog(`  ${playerColor} hand now has ${updatedHand.cards.length} cards`)
     }
   }
   
@@ -270,10 +269,10 @@ export default function Board() {
     setSelectedCard(null) // Clear any selected card
     setDiscardPile([]) // Clear discard pile (fresh start)
     
-    console.log('Shuffled and dealt:')
-    console.log(`  Red hand: ${newRedHand.cards.length} cards`)
-    console.log(`  Blue hand: ${newBlueHand.cards.length} cards`)
-    console.log(`  Deck remaining: ${newDeck.cards.length} cards`)
+    debugLog('Shuffled and dealt:')
+    debugLog(`  Red hand: ${newRedHand.cards.length} cards`)
+    debugLog(`  Blue hand: ${newBlueHand.cards.length} cards`)
+    debugLog(`  Deck remaining: ${newDeck.cards.length} cards`)
   }
   
   /**
@@ -311,10 +310,10 @@ export default function Board() {
     setDiscardPile([]) // Reset discard pile
     
     // Debug: log hands for verification
-    console.log('Game initialized:')
-    console.log(`  Red hand: ${newRedHand.cards.length} cards`, newRedHand.cards.map(c => `${c.rank}${c.suit === 'joker' ? '🃏' : c.suit[0]}`))
-    console.log(`  Blue hand: ${newBlueHand.cards.length} cards`, newBlueHand.cards.map(c => `${c.rank}${c.suit === 'joker' ? '🃏' : c.suit[0]}`))
-    console.log(`  Deck remaining: ${newDeck.cards.length} cards`)
+    debugLog('Game initialized:')
+    debugLog(`  Red hand: ${newRedHand.cards.length} cards`, newRedHand.cards.map(c => `${c.rank}${c.suit === 'joker' ? '🃏' : c.suit[0]}`))
+    debugLog(`  Blue hand: ${newBlueHand.cards.length} cards`, newBlueHand.cards.map(c => `${c.rank}${c.suit === 'joker' ? '🃏' : c.suit[0]}`))
+    debugLog(`  Deck remaining: ${newDeck.cards.length} cards`)
   }
   
   // Initialize game on component mount
@@ -331,7 +330,7 @@ export default function Board() {
       // But they won't get chips or cappers placed on them
       if (cell.isCorner) {
         // Jokers are free squares - allow selection but they won't get cappers
-        console.log('Joker selected for score line:', row, col)
+        debugLog('Joker selected for score line:', row, col)
         // Continue to selection logic below
       } else {
         // For non-joker cells, check if they're capped or have chips
@@ -343,7 +342,7 @@ export default function Board() {
             return // Can't select capped cells of different colors
           }
           // Same color capped cells can be selected if they create a valid score
-          console.log('Capped cell selected for additional score:', row, col, 'color:', capMode)
+          debugLog('Capped cell selected for additional score:', row, col, 'color:', capMode)
         }
         
         // Must have a chip of the cap mode color
@@ -352,12 +351,12 @@ export default function Board() {
         const hasValidChip = (cell.chip === capMode)
         
         if (!hasValidChip) {
-          console.log('Cell rejected for cap mode:', row, col, 'chip:', cell.chip, 'capMode:', capMode)
+          debugLog('Cell rejected for cap mode:', row, col, 'chip:', cell.chip, 'capMode:', capMode)
           return // Can't cap cells without matching chip
         }
       }
       
-      console.log('Cell accepted for cap mode:', row, col, 'chip:', cell.chip, 'capMode:', capMode, 'isCapped:', cell.isCapped)
+      debugLog('Cell accepted for cap mode:', row, col, 'chip:', cell.chip, 'capMode:', capMode, 'isCapped:', cell.isCapped)
       
       // Check if cell already selected
       const isAlreadySelected = selectedCapCells.some(
@@ -380,7 +379,7 @@ export default function Board() {
         // If this new cell is capped, check rules
         if (cell.isCapped && cell.chip === capMode) {
           if (currentlySelectedCappedCount >= 2) {
-            console.log('Cannot select more than 2 capped chips per score. Already have', currentlySelectedCappedCount, 'capped chips selected.')
+            debugLog('Cannot select more than 2 capped chips per score. Already have', currentlySelectedCappedCount, 'capped chips selected.')
             return // Block selection - max 2 capped chips allowed
           }
           
@@ -411,14 +410,14 @@ export default function Board() {
               const sharedScores = Array.from(firstScoreIds).filter(id => secondScoreIds.has(id))
               
               if (sharedScores.length > 0) {
-                console.log('Cannot select two capped chips from the same score. They must come from different scores.')
-                console.log('  First capped cell scores:', Array.from(firstScoreIds))
-                console.log('  Second capped cell scores:', Array.from(secondScoreIds))
-                console.log('  Shared scores:', sharedScores)
+                debugLog('Cannot select two capped chips from the same score. They must come from different scores.')
+                debugLog('  First capped cell scores:', Array.from(firstScoreIds))
+                debugLog('  Second capped cell scores:', Array.from(secondScoreIds))
+                debugLog('  Shared scores:', sharedScores)
                 return // Block - must be from different scores
               }
               
-              console.log('Second capped chip is from a different score - allowed')
+              debugLog('Second capped chip is from a different score - allowed')
             }
           }
         }
@@ -433,11 +432,11 @@ export default function Board() {
           const validatedScore = validateConsecutiveLine(newSelection, board, capMode)
           
           if (!validatedScore) {
-            console.log('Selected cells do not form a valid consecutive line')
+            debugLog('Selected cells do not form a valid consecutive line')
             return // Invalid selection - not a consecutive line
           }
           
-          console.log('Valid consecutive line detected:', validatedScore.direction)
+          debugLog('Valid consecutive line detected:', validatedScore.direction)
           
           // Now check for all possible scores that these cells could form
           // (for double/triple/quad detection)
@@ -445,9 +444,9 @@ export default function Board() {
           // Pass cappedScores to validate capped chip rules (max 1 capped chip)
           const allScores = detectScores(board, capMode, cappedScores)
           
-          console.log('All scores detected for', capMode, ':', allScores.length, 'scores')
+          debugLog('All scores detected for', capMode, ':', allScores.length, 'scores')
           allScores.forEach(score => {
-            console.log('  Score:', score.direction, 'cells:', score.cells.map(c => `${c.row},${c.col}`).join(','))
+            debugLog('  Score:', score.direction, 'cells:', score.cells.map(c => `${c.row},${c.col}`).join(','))
           })
           
           // Find all scores that match the selected cells exactly (same cells, any direction)
@@ -474,7 +473,7 @@ export default function Board() {
             })
             
             if (isAlreadyCapped) {
-              console.log('Score already capped:', score.direction)
+              debugLog('Score already capped:', score.direction)
               return false
             }
             
@@ -499,7 +498,7 @@ export default function Board() {
                 cellScoreIds.has(s.id) && s.color === capMode
               )
               
-              console.log('All cells capped, related scores:', relatedScores.length, 'for', score.direction)
+              debugLog('All cells capped, related scores:', relatedScores.length, 'for', score.direction)
               
               // If all cells are capped from scores of the same color, allow it
               // (this is a double/triple/quad scenario - shared cells can be reused)
@@ -508,7 +507,7 @@ export default function Board() {
             
             // Otherwise, use normal validation (max 2 capped chips from different scores)
             const isValid = validateCappedChipsInScore(score, board, cappedScores)
-            console.log('Score validation for', score.direction, ':', isValid)
+            debugLog('Score validation for', score.direction, ':', isValid)
             return isValid
           })
           
@@ -529,7 +528,7 @@ export default function Board() {
           // - 4 matching scores = counts as 4 scores (quad - same cells form 4 different lines)
           // Each capped score counts toward the win condition (need 4 total)
           
-          console.log('Matching scores found:', matchingScores.length, matchingScores.map(s => s.direction))
+          debugLog('Matching scores found:', matchingScores.length, matchingScores.map(s => s.direction))
           
           if (matchingScores.length > 0) {
             // Remove any scores that are already capped to avoid duplicates
@@ -581,11 +580,11 @@ export default function Board() {
                       })
                     })
                   
-                  console.log('Capping scores:', newScores.length, 'new scores:', newScores.map(s => `${s.direction}-${s.cells.map(c => `${c.row},${c.col}`).join(',')}`))
+                  debugLog('Capping scores:', newScores.length, 'new scores:', newScores.map(s => `${s.direction}-${s.cells.map(c => `${c.row},${c.col}`).join(',')}`))
                   
                   const updated = [...current, ...newScores]
                   
-                  console.log('Total capped scores:', updated.length, 'for', capMode, ':', updated.filter(s => s.color === capMode && s.isCapped).length)
+                  debugLog('Total capped scores:', updated.length, 'for', capMode, ':', updated.filter(s => s.color === capMode && s.isCapped).length)
                   
                   // Check for win condition
                   const detectedWinner = checkWinCondition(updated)
@@ -629,17 +628,17 @@ export default function Board() {
                       validateCappedChipsInScore(score, currentBoard, updatedCappedScores)
                     )
                     
-                    console.log('Remaining valid scores after capping:', validUncappedScores.length)
+                    debugLog('Remaining valid scores after capping:', validUncappedScores.length)
                     
                     // If there are more valid scores, keep cap mode active
                     // Otherwise, exit cap mode (but DON'T switch turns - player can continue their turn)
                     // This allows players to cap missed scores from previous turns without losing their current turn
                     if (validUncappedScores.length === 0) {
                       setCapMode(null)
-                      console.log('Exiting cap mode - player can continue their turn to place a chip')
+                      debugLog('Exiting cap mode - player can continue their turn to place a chip')
                     } else {
                       // Keep cap mode active so player can cap additional scores
-                      console.log('Keeping cap mode active for additional scores:', validUncappedScores.length)
+                      debugLog('Keeping cap mode active for additional scores:', validUncappedScores.length)
                     }
                     
                     return currentBoard
@@ -667,16 +666,16 @@ export default function Board() {
     if (!selectedCard) {
       const currentHand = getCurrentPlayerHand()
       const handCards = currentHand?.cards || []
-      console.log(`⚠️ No card selected. ${currentPlayer.toUpperCase()} player's hand:`, handCards.map(c => `${c.rank}${c.suit === 'joker' ? '🃏' : c.suit[0]}`))
-      console.log(`   To select a card (temporary for Phase 3): setSelectedCard(handCards[0]) in console`)
-      console.log(`   Card selection UI coming in Phase 4`)
+      debugLog(`⚠️ No card selected. ${currentPlayer.toUpperCase()} player's hand:`, handCards.map(c => `${c.rank}${c.suit === 'joker' ? '🃏' : c.suit[0]}`))
+      debugLog(`   To select a card (temporary for Phase 3): setSelectedCard(handCards[0]) in console`)
+      debugLog(`   Card selection UI coming in Phase 4`)
       return
     }
     
     // Get current player's hand
     const currentHand = getCurrentPlayerHand()
     if (!currentHand || !currentHand.hasCard(selectedCard.id)) {
-      console.log('Selected card is not in your hand.')
+      debugLog('Selected card is not in your hand.')
       setSelectedCard(null) // Clear invalid selection
       return
     }
@@ -686,7 +685,7 @@ export default function Board() {
       // Two-eyed jack: place chip anywhere (unoccupied)
       const addResult = wildCardAddChip(row, col, currentPlayer, board)
       if (!addResult.success) {
-        console.log(`❌ Cannot place chip with two-eyed jack: ${addResult.error}`)
+        debugLog(`❌ Cannot place chip with two-eyed jack: ${addResult.error}`)
         return
       }
       
@@ -726,7 +725,7 @@ export default function Board() {
         return newBoard
       })
       
-      console.log(`🎴 Two-eyed jack played: Placed ${currentPlayer} chip at (${row}, ${col})`)
+      debugLog(`🎴 Two-eyed jack played: Placed ${currentPlayer} chip at (${row}, ${col})`)
       setSelectedCard(null)
       setJokerActionMode(null)
       
@@ -740,7 +739,7 @@ export default function Board() {
       const opponentColor: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
       const removeResult = wildCardRemoveChip(row, col, opponentColor, board)
       if (!removeResult.success) {
-        console.log(`❌ Cannot remove chip with one-eyed jack: ${removeResult.error}`)
+        debugLog(`❌ Cannot remove chip with one-eyed jack: ${removeResult.error}`)
         return
       }
       
@@ -780,7 +779,7 @@ export default function Board() {
         return newBoard
       })
       
-      console.log(`🎴 One-eyed jack played: Removed ${opponentColor} chip from (${row}, ${col})`)
+      debugLog(`🎴 One-eyed jack played: Removed ${opponentColor} chip from (${row}, ${col})`)
       setSelectedCard(null)
       setJokerActionMode(null)
       
@@ -798,7 +797,7 @@ export default function Board() {
       if (!jokerActionMode) {
         // First click: show UI to choose action (we'll handle this below)
         // For now, we need to prompt the user
-        console.log(`🎴 Joker selected. Choose action: Add chip or Remove opponent chip`)
+        debugLog(`🎴 Joker selected. Choose action: Add chip or Remove opponent chip`)
         // We'll add UI for this
         return
       }
@@ -807,7 +806,7 @@ export default function Board() {
         // Joker: add chip
         const addResult = wildCardAddChip(row, col, currentPlayer, board)
         if (!addResult.success) {
-          console.log(`❌ Cannot place chip with joker: ${addResult.error}`)
+          debugLog(`❌ Cannot place chip with joker: ${addResult.error}`)
           return
         }
         
@@ -847,7 +846,7 @@ export default function Board() {
           return newBoard
         })
         
-        console.log(`🎴 Joker played (ADD): Placed ${currentPlayer} chip at (${row}, ${col})`)
+        debugLog(`🎴 Joker played (ADD): Placed ${currentPlayer} chip at (${row}, ${col})`)
         setSelectedCard(null)
         setJokerActionMode(null)
         
@@ -863,7 +862,7 @@ export default function Board() {
         const opponentColor: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
         const removeResult = wildCardRemoveChip(row, col, opponentColor, board)
         if (!removeResult.success) {
-          console.log(`❌ Cannot remove chip with joker: ${removeResult.error}`)
+          debugLog(`❌ Cannot remove chip with joker: ${removeResult.error}`)
           return
         }
         
@@ -903,7 +902,7 @@ export default function Board() {
           return newBoard
         })
         
-        console.log(`🎴 Joker played (REMOVE): Removed ${opponentColor} chip from (${row}, ${col})`)
+        debugLog(`🎴 Joker played (REMOVE): Removed ${opponentColor} chip from (${row}, ${col})`)
         setSelectedCard(null)
         setJokerActionMode(null)
         
@@ -921,9 +920,9 @@ export default function Board() {
     // This checks: bounds, card match, corner spaces, occupied cells, etc.
     const validationResult = validatePlayCard(selectedCard, row, col, board)
     if (!validationResult.success) {
-      console.log(`❌ Cannot play card: ${validationResult.error}`)
-      console.log(`  Card: ${selectedCard.rank} of ${selectedCard.suit}`)
-      console.log(`  Position: (${row}, ${col}) - ${cell.rank} of ${cell.suit}`)
+      debugLog(`❌ Cannot play card: ${validationResult.error}`)
+      debugLog(`  Card: ${selectedCard.rank} of ${selectedCard.suit}`)
+      debugLog(`  Position: (${row}, ${col}) - ${cell.rank} of ${cell.suit}`)
       return
     }
     
@@ -951,8 +950,8 @@ export default function Board() {
       setBlueHand(updatedHand)
     }
     
-    console.log(`Playing ${selectedCard.rank}${selectedCard.suit === 'joker' ? '🃏' : selectedCard.suit[0]} at (${row}, ${col})`)
-    console.log(`  Hand now has ${updatedHand.cards.length} cards (card removed)`)
+    debugLog(`Playing ${selectedCard.rank}${selectedCard.suit === 'joker' ? '🃏' : selectedCard.suit[0]} at (${row}, ${col})`)
+    debugLog(`  Hand now has ${updatedHand.cards.length} cards (card removed)`)
     
     // Place chip for current player
     setBoard(prevBoard => {
@@ -987,132 +986,6 @@ export default function Board() {
     setJokerActionMode(null)
   }
   
-  const handleCapScore = (score: Score) => {
-    setBoard(prev => {
-      const newBoard = prev.map(r => [...r])
-      
-      // Check if this exact score (same cells AND same direction) is already capped
-      // For double/triple/quad: same cells but different directions = different scores
-      const isAlreadyCapped = cappedScores.some(capped => {
-        if (capped.id === score.id) return true
-        
-        // Must be same color, same direction, and same cells
-        if (capped.color !== score.color || capped.direction !== score.direction) {
-          return false
-        }
-        
-        if (!capped.isCapped || capped.cells.length !== score.cells.length) {
-          return false
-        }
-        
-        // Check if cells match (sort to compare regardless of order)
-        const cappedCellIds = capped.cells.map(c => `${c.row},${c.col}`).sort()
-        const scoreCellIds = score.cells.map(c => `${c.row},${c.col}`).sort()
-        
-        return cappedCellIds.every((id, i) => id === scoreCellIds[i])
-      })
-      
-      if (isAlreadyCapped) {
-        return prev // Don't cap if already capped
-      }
-      
-      // Create a mutable copy of the score to cap
-      const scoreToCap = { ...score, isCapped: true }
-      capScore(newBoard, scoreToCap)
-      
-      // Add to capped scores (only if not already there)
-      setCappedScores(current => {
-        // Check again to avoid race conditions
-        // For double/triple/quad: same cells but different directions = different scores
-        const alreadyExists = current.some(capped => {
-          if (capped.id === scoreToCap.id) return true
-          
-          // Must be same color, same direction, and same cells
-          if (capped.color !== scoreToCap.color || capped.direction !== scoreToCap.direction) {
-            return false
-          }
-          
-          if (!capped.isCapped || capped.cells.length !== scoreToCap.cells.length) {
-            return false
-          }
-          
-          // Check if cells match (sort to compare regardless of order)
-          const cappedCellIds = capped.cells.map(c => `${c.row},${c.col}`).sort()
-          const scoreCellIds = scoreToCap.cells.map(c => `${c.row},${c.col}`).sort()
-          
-          return cappedCellIds.every((id, i) => id === scoreCellIds[i])
-        })
-        
-        if (alreadyExists) {
-          return current
-        }
-        
-        const updated = [...current, scoreToCap]
-        // Check for win condition
-        const detectedWinner = checkWinCondition(updated)
-        if (detectedWinner && !winner) {
-          // Only show winner modal once
-          setWinner(detectedWinner)
-          setShowWinnerModal(true)
-        }
-        return updated
-      })
-      
-      // After capping, check if there are more valid scores available for this color
-      // This allows players to cap double/triple/quad scores in sequence
-      setCappedScores(currentCappedScores => {
-        const updatedCappedScores = [...currentCappedScores, scoreToCap]
-        
-        // Check for additional valid scores after state updates
-        setTimeout(() => {
-          setBoard(currentBoard => {
-            const allAvailableScores = detectScores(currentBoard, score.color, cappedScores)
-            
-            // Filter out scores that are already capped
-            const uncappedScores = allAvailableScores.filter(availableScore => {
-              return !updatedCappedScores.some(capped => 
-                capped.id === availableScore.id || 
-                (capped.color === availableScore.color &&
-                 capped.direction === availableScore.direction &&
-                 capped.cells.length === availableScore.cells.length &&
-                 capped.cells.every((c, i) => 
-                   c.row === availableScore.cells[i].row && c.col === availableScore.cells[i].col
-                 ))
-              )
-            })
-            
-            // Validate remaining scores
-            const validUncappedScores = uncappedScores.filter(availableScore => 
-              validateCappedChipsInScore(availableScore, currentBoard, updatedCappedScores)
-            )
-            
-            console.log('Remaining valid scores after capping (handleCapScore):', validUncappedScores.length)
-            
-            // If there are more valid scores, keep cap mode active
-            // Otherwise, exit cap mode (but DON'T switch turns - player can continue their turn)
-            // This allows players to cap missed scores from previous turns without losing their current turn
-            if (validUncappedScores.length === 0) {
-              setCapMode(null)
-              console.log('Exiting cap mode - player can continue their turn to place a chip')
-            } else {
-              // Keep cap mode active so player can cap additional scores
-              console.log('Keeping cap mode active for additional scores:', validUncappedScores.length)
-            }
-            
-            return currentBoard
-          })
-        }, 100) // Small delay to ensure state is updated
-        
-        return updatedCappedScores
-      })
-      
-      // Clear selection but keep cap mode if there are more scores
-      setSelectedCapCells([])
-      
-      return newBoard
-    })
-  }
-
   // Count scores by color - each unique score (by direction) counts as 1
   const scoreCounts = {
     red: cappedScores.filter(s => s.color === 'red' && s.isCapped).length,
@@ -1121,9 +994,14 @@ export default function Board() {
     yellow: cappedScores.filter(s => s.color === 'yellow' && s.isCapped).length,
   }
   
-  // Debug: log score counts
-  console.log('Score counts:', scoreCounts, 'Total capped:', cappedScores.filter(s => s.isCapped).length)
-  console.log('Blue scores:', cappedScores.filter(s => s.color === 'blue' && s.isCapped).map(s => `${s.direction}-${s.id}`))
+  // Stable click handlers: the memoized board cells and hand cards get the same
+  // function every render, while the call still uses the latest handler and state.
+  const latestHandlers = useRef({ handleCellClick, handleCardSelect })
+  useLayoutEffect(() => {
+    latestHandlers.current = { handleCellClick, handleCardSelect }
+  })
+  const onCellClick = useCallback((row: number, col: number) => latestHandlers.current.handleCellClick(row, col), [])
+  const onCardSelect = useCallback((card: Card) => latestHandlers.current.handleCardSelect(card), [])
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
@@ -1149,7 +1027,7 @@ export default function Board() {
           <HandComponent
             hand={getCurrentPlayerHand()}
             selectedCardId={selectedCard?.id || null}
-            onCardSelect={handleCardSelect}
+            onCardSelect={onCardSelect}
             onBurnCard={handleBurnCard}
             onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
             disabled={!!capMode || !!winner}
@@ -1358,67 +1236,19 @@ export default function Board() {
       >
         {board.map((row, rowIndex) =>
           row.map((cell, colIndex) => (
-            <button
+            <BoardCell
               key={`${rowIndex}-${colIndex}`}
-              onClick={() => handleCellClick(rowIndex, colIndex)}
-              className={`
-                rounded-md transition-all relative
-                hover:scale-[1.02]
-                ${permanentCappers.has(`${rowIndex},${colIndex}`) 
-                  ? permanentCappers.get(`${rowIndex},${colIndex}`) === 'red'
-                    ? 'ring-2 ring-red-500 bg-red-500/10' 
-                    : permanentCappers.get(`${rowIndex},${colIndex}`) === 'blue'
-                    ? 'ring-2 ring-blue-500 bg-blue-500/10'
-                    : permanentCappers.get(`${rowIndex},${colIndex}`) === 'green'
-                    ? 'ring-2 ring-green-500 bg-green-500/10'
-                    : 'ring-2 ring-yellow-500 bg-yellow-500/10'
-                  : ''
-                }
-              `}
-              aria-label={`Cell ${rowIndex}, ${colIndex}`}
-              type="button"
-            >
-              {/* Card visual */}
-              <CardComponent cell={cell} />
-              
-              {/* Chip overlay - just the colored sphere */}
-              {cell.chip && (
-                <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-                  <div className={`
-                    w-10 h-10 rounded-full border-2 border-white shadow-lg
-                    ${cell.chip === 'red' ? 'bg-red-600' : ''}
-                    ${cell.chip === 'blue' ? 'bg-blue-600' : ''}
-                    ${cell.chip === 'green' ? 'bg-green-600' : ''}
-                    ${cell.chip === 'yellow' ? 'bg-yellow-600' : ''}
-                  `} />
-                </div>
-              )}
-              
-              {/* Permanent capper chip overlay - from capped scores (always visible, unremovable) */}
-              {permanentCappers.has(`${rowIndex},${colIndex}`) && (
-                <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                  <div className="relative w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-xl" style={{ imageRendering: 'crisp-edges', backfaceVisibility: 'hidden' }}>
-                    <div className={`absolute inset-0 flex items-center justify-center`}>
-                      <div className={`w-6 h-6 rounded-full ${permanentCappers.get(`${rowIndex},${colIndex}`) === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {/* Temporary capper chip overlay - during selection (only if not already permanently capped and not a joker) */}
-              {capMode && 
-               selectedCapCells.some(c => c.row === rowIndex && c.col === colIndex) &&
-               !permanentCappers.has(`${rowIndex},${colIndex}`) &&
-               !cell.isCorner && (
-                <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                  <div className="relative w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-xl" style={{ imageRendering: 'crisp-edges', backfaceVisibility: 'hidden' }}>
-                    <div className={`absolute inset-0 flex items-center justify-center`}>
-                      <div className={`w-6 h-6 rounded-full ${capMode === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </button>
+              row={rowIndex}
+              col={colIndex}
+              cell={cell}
+              capperColor={permanentCappers.get(`${rowIndex},${colIndex}`) ?? null}
+              tempCapColor={
+                capMode && selectedCapCells.some(c => c.row === rowIndex && c.col === colIndex)
+                  ? capMode
+                  : null
+              }
+              onCellClick={onCellClick}
+            />
           ))
         )}
       </div>
