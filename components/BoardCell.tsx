@@ -13,6 +13,8 @@ type BoardCellProps = {
   /** Color of the temporary capper while selecting a score, if any */
   tempCapColor: ChipColor | null
   onCellClick: (row: number, col: number) => void
+  /** Pulse this square because the latest move happened here */
+  highlight?: boolean
 }
 
 const RING_CLASSES: Record<ChipColor, string> = {
@@ -47,11 +49,11 @@ function CapperChip({ color }: { color: ChipColor }) {
  * One square of the board. Memoized so a click only redraws the squares
  * whose card, chip or capper actually changed.
  */
-function BoardCell({ row, col, cell, capperColor, tempCapColor, onCellClick }: BoardCellProps) {
+function BoardCell({ row, col, cell, capperColor, tempCapColor, onCellClick, highlight = false }: BoardCellProps) {
   return (
     <button
       onClick={() => onCellClick(row, col)}
-      className={`rounded-md transition-all relative hover:scale-[1.02] ${capperColor ? RING_CLASSES[capperColor] : ''}`}
+      className={`rounded-md transition-all relative hover:scale-[1.02] ${capperColor ? RING_CLASSES[capperColor] : ''} ${highlight ? 'last-move' : ''}`}
       aria-label={`Cell ${row}, ${col}`}
       type="button"
     >
@@ -60,7 +62,7 @@ function BoardCell({ row, col, cell, capperColor, tempCapColor, onCellClick }: B
       {/* Chip overlay - just the colored sphere */}
       {cell.chip && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-          <div className={`w-10 h-10 rounded-full border-2 border-white shadow-lg ${CHIP_CLASSES[cell.chip]}`} />
+          <div className={`chip-drop w-[55%] max-w-10 aspect-square rounded-full border-2 border-white shadow-lg ${CHIP_CLASSES[cell.chip]}`} />
         </div>
       )}
 

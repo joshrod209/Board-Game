@@ -1,10 +1,12 @@
 'use client'
 
-import type { Card, Hand } from '@/gameCore/types'
+import type { Card } from '@/gameCore/types'
 import HandCard from './HandCard'
 
 type HandProps = {
-  hand: Hand | null
+  hand: { cards: Card[] } | null
+  /** Heading override, e.g. "Your hand" in online games */
+  title?: string
   selectedCardId: string | null
   onCardSelect: (card: Card) => void
   onBurnCard?: () => void
@@ -28,7 +30,8 @@ export default function Hand({
   canBurn = false,
   hasBurned = false,
   selectedCard,
-  jokerActionMode = null
+  jokerActionMode = null,
+  title,
 }: HandProps) {
   if (!hand || hand.cards.length === 0) {
     return (
@@ -45,7 +48,7 @@ export default function Hand({
       <div className="mb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className={`text-sm font-bold ${playerColor === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
-            {playerColor.toUpperCase()} Player&apos;s Hand ({hand.cards.length} cards)
+            {title ?? `${playerColor.toUpperCase()} Player's Hand`} ({hand.cards.length} cards)
           </h3>
           <div className="flex gap-2">
             {/* Joker action buttons */}

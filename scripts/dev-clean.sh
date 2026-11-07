@@ -3,7 +3,7 @@
 # Clean Next.js cache and restart dev server
 
 echo "🛑 Stopping dev server..."
-pkill -f "next dev" 2>/dev/null
+pkill -f "next dev" 2>/dev/null; pkill -f "tsx server.ts" 2>/dev/null
 sleep 1
 
 echo "🧹 Clearing caches..."
@@ -12,5 +12,5 @@ rm -rf node_modules/.cache
 rm -rf .turbo
 
 echo "🚀 Starting dev server..."
-npm run dev
+tsx server.ts
 

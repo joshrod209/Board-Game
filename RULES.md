@@ -47,9 +47,11 @@ Quad Sequence is a custom Sequence-style board game played on a 10×10 custom bo
 ## Game Rules
 
 ### Turn System
-- Currently supports 2 players (red and blue)
-- Players alternate turns
-- Red player starts first
+- 2 players (red vs blue) or 4 players (two teams of 2)
+- In 4-player games, teammates share a chip color and their capped scores; seats alternate teams, so turns go Red, Blue, Red, Blue
+- Each player has their own hand
+- Red starts the first game; the starting seat rotates each new game
+- A player may cap their own team's scores at any time, even on another player's turn
 
 ### Chip Placement
 - Players place chips by clicking empty cells
@@ -59,12 +61,13 @@ Quad Sequence is a custom Sequence-style board game played on a 10×10 custom bo
 
 ### Special Rules
 
-#### Joker Actions
+#### Wild Cards
 - **File**: `gameCore/jokerLogic.ts`
-- Jokers allow special actions:
-  - **Add**: Place a chip anywhere on the board
-  - **Remove**: Remove a chip (cannot remove from capped scores)
-- Jokers count as wildcards for score detection
+- Every wild card play ends your turn.
+- **Two-eyed Jack** (♦ and ♣): place your chip on any open square, except a corner Joker space or a square that's already taken
+- **One-eyed Jack** (♥ and ♠): remove any opponent chip that isn't capped
+- **Joker card**: choose one: add a chip like a two-eyed Jack, OR remove a chip like a one-eyed Jack
+- The corner Joker spaces count as wildcards for score detection
 
 #### Burn Rule
 - **File**: `gameCore/burnRule.ts`

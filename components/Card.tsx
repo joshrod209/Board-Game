@@ -96,19 +96,20 @@ function Card({ cell, className = '' }: CardProps) {
         </div>
       ) : (
         <>
-          {/* Top-left rank and suit */}
-          <div className={`absolute top-1 left-1.5 flex flex-col items-start ${suitColor} font-bold z-10`}>
+          {/* Top-left rank and suit (hidden on phones, where squares are tiny) */}
+          <div className={`absolute top-1 left-1.5 hidden sm:flex flex-col items-start ${suitColor} font-bold z-10`}>
             <div className="text-[11px] leading-tight font-serif">{cell.rank}</div>
             <div className="text-[10px] leading-tight mt-0.5">{suitSymbol}</div>
           </div>
 
-          {/* Center large suit symbol */}
-          <div className={`text-xl md:text-2xl ${suitColor} font-bold`}>
-            {suitSymbol}
+          {/* Center: big suit; on phones also the rank so squares stay readable */}
+          <div className={`flex items-center leading-none text-xs sm:text-xl md:text-2xl ${suitColor} font-bold`}>
+            <span className="sm:hidden font-serif tracking-tighter">{cell.rank}</span>
+            <span>{suitSymbol}</span>
           </div>
 
           {/* Bottom-right rank and suit (upside down) */}
-          <div className={`absolute bottom-1 right-1.5 flex flex-col items-end rotate-180 ${suitColor} font-bold z-10`}>
+          <div className={`absolute bottom-1 right-1.5 hidden sm:flex flex-col items-end rotate-180 ${suitColor} font-bold z-10`}>
             <div className="text-[11px] leading-tight font-serif">{cell.rank}</div>
             <div className="text-[10px] leading-tight mt-0.5">{suitSymbol}</div>
           </div>

@@ -30,3 +30,44 @@
   animation: slideUp 0.3s ease-out;
 }
 
+
+/* A chip dropping onto the board */
+@keyframes chipDrop {
+  0% {
+    opacity: 0;
+    transform: scale(1.6) translateY(-12px);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.chip-drop {
+  animation: chipDrop 0.35s ease-out;
+}
+
+/* The square where the latest move happened */
+@keyframes lastMovePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.9);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(250, 204, 21, 0.35);
+  }
+}
+
+.last-move {
+  animation: lastMovePulse 1.4s ease-in-out 3;
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.9);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip-drop,
+  .last-move {
+    animation: none;
+  }
+}

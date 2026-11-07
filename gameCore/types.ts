@@ -32,7 +32,7 @@ export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 
 
 /**
  * Wild card types for special playing cards
- * - twoEyedJack: Jack of Diamonds/Clubs - can place chip anywhere (unoccupied)
+ * - twoEyedJack: Jack of Diamonds/Clubs - can place chip on any open, non-corner square (ends turn)
  * - oneEyedJack: Jack of Hearts/Spades - can remove opponent's uncapped chip (ends turn)
  * - joker: Joker card - can add your chip OR remove opponent's chip (ends turn)
  */

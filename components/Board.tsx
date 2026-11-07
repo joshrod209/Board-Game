@@ -729,8 +729,10 @@ export default function Board() {
       setSelectedCard(null)
       setJokerActionMode(null)
       
-      // Draw new card and CONTINUE TURN (two-eyed jack doesn't end turn)
+      // Draw new card and END TURN (two-eyed jack ends turn)
       drawCardForPlayer(currentPlayer, updatedHand)
+      setCurrentPlayer(currentPlayer === 'red' ? 'blue' : 'red')
+      setHasBurnedThisTurn(false)
       return
     }
     
