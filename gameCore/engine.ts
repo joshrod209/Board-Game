@@ -13,8 +13,7 @@ import type { Card, Cell, ChipColor, Score } from './types'
 import { INITIAL_HAND_SIZE } from './constants'
 import { boardLayout } from './boardLayout'
 import { createFullDeck } from './deck'
-import { playCard as validatePlayCard } from './playCard'
-import { isCardPlayable } from './burnRule'
+import { canPlayCard, playCard as validatePlayCard } from './playCard'
 import { wildCardAddChip, wildCardRemoveChip } from './jokerLogic'
 import {
   detectScores,
@@ -216,6 +215,50 @@ function spendCard(state: GameState, playerId: string, card: Card): GameState {
 // Turn actions
 // ---------------------------------------------------------------------------
 
+/**
+ * Can this card be played anywhere right now by this team?
+ * (Unlike burnRule.isCardPlayable, a one-eyed jack only counts when there is
+ * an uncapped chip of the OTHER team to remove.)
+ */
+export function isPlayableFor(card: Card, board: Cell[][], team: Team): boolean {
+  const opponent = otherTeam(team)
+  for (const row of board) {
+    for (const cell of row) {
+      if (cell.isCorner) continue
+      const empty = !cell.chip
+      const removable = cell.chip === opponent && !cell.isCapped
+      if (card.wildCardType === 'twoEyedJack' && empty) return true
+      if (card.wildCardType === 'oneEyedJack' && removable) return true
+      if (card.wildCardType === 'joker' && (empty || removable)) return true
+      if (!card.wildCardType && canPlayCard(card, cell.row, cell.col, board)) return true
+    }
+  }
+  return false
+}
+
+/**
+ * Can this player pass? Yes when none of their regular (non-wild) cards can
+ * be played. Wild cards never force a move, and burning is optional.
+ */
+export function canPassWith(hand: Card[], board: Cell[][], team: Team): boolean {
+  return !hand.some(c => !c.wildCardType && isPlayableFor(c, board, team))
+}
+
+/** What the current player is able to do; drives the Burn and Pass buttons */
+export function turnOptions(state: GameState, playerId: string) {
+  const seat = seatOf(state, playerId)
+  const hand = state.hands[playerId] ?? []
+  const team = seat?.team ?? 'red'
+  const unplayable = hand.filter(c => !isPlayableFor(c, state.board, team))
+  return {
+    canPlay: unplayable.length < hand.length,
+    /** Once per turn, swap a card that can't go anywhere for a new one */
+    canBurn: !state.hasBurnedThisTurn && state.deck.length > 0 && unplayable.length > 0,
+    /** No regular card fits (wild cards are optional), so the player may pass */
+    canPass: seat !== undefined && canPassWith(hand, state.board, team),
+  }
+}
+
 function checkTurn(state: GameState, playerId: string): string | null {
   if (state.winner) return 'The game is over'
   if (!seatOf(state, playerId)) return 'You are not in this game'
@@ -295,7 +338,7 @@ export function burnCard(state: GameState, playerId: string, cardId: string): En
 
   const card = state.hands[playerId]?.find(c => c.id === cardId)
   if (!card) return { ok: false, error: 'That card is not in your hand' }
-  if (isCardPlayable(card, state.board)) {
+  if (isPlayableFor(card, state.board, seatOf(state, playerId)!.team)) {
     return { ok: false, error: 'That card is playable, so it cannot be burned' }
   }
   if (state.deck.length === 0) return { ok: false, error: 'The deck is empty' }
@@ -306,6 +349,20 @@ export function burnCard(state: GameState, playerId: string, cardId: string): En
     ok: true,
     state: { ...next, hasBurnedThisTurn: true, lastEvent: `${seat.name} burned ${cardLabel(card)}` },
   }
+}
+
+/**
+ * Pass the turn. Allowed when none of your regular cards can be played; you
+ * never have to use a wild card, and burning first is optional.
+ */
+export function passTurn(state: GameState, playerId: string): EngineResult {
+  const turnError = checkTurn(state, playerId)
+  if (turnError) return { ok: false, error: turnError }
+  if (!turnOptions(state, playerId).canPass) {
+    return { ok: false, error: 'You have a regular card you can play, so you cannot pass' }
+  }
+  const seat = seatOf(state, playerId)!
+  return { ok: true, state: { ...endTurn(state), lastEvent: `${seat.name} passed` } }
 }
 
 /** Fresh deck and hands once the deck or every hand runs out */
@@ -482,6 +539,8 @@ export type PlayerView = {
   cappedScores: Score[]
   currentPlayerId: string
   hasBurnedThisTurn: boolean
+  /** True on your turn when no regular card in your hand can be played */
+  canPass: boolean
   winner: Team | null
   lastMove: LastMove | null
   lastEvent: string | null
@@ -498,6 +557,7 @@ export function viewFor(state: GameState, playerId: string): PlayerView {
     cappedScores: state.cappedScores,
     currentPlayerId: currentSeat(state).id,
     hasBurnedThisTurn: state.hasBurnedThisTurn,
+    canPass: currentSeat(state).id === playerId && !state.winner && turnOptions(state, playerId).canPass,
     winner: state.winner,
     lastMove: state.lastMove,
     lastEvent: state.lastEvent,

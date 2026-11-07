@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Card } from '@/gameCore/types'
 import { BOARD_SIZE } from '@/gameCore/constants'
-import { isCardPlayable } from '@/gameCore/burnRule'
-import { type CellPos, type PlayerView, type Team, checkCapCell, hasScoresToCap, permanentCapperMap } from '@/gameCore/engine'
+import { type CellPos, type PlayerView, type Team, checkCapCell, hasScoresToCap, isPlayableFor, permanentCapperMap } from '@/gameCore/engine'
 import type { GameAction, RoomUpdate } from '@/lib/protocol'
 import { api } from '@/lib/socket'
 import BoardCell from '../BoardCell'
@@ -141,7 +140,7 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
 
   const allHandsEmpty = game.seats.every(s => s.cardCount === 0)
   const canReshuffle = !game.winner && (game.deckCount === 0 || allHandsEmpty)
-  const canBurn = myTurn && selectedCard ? !isCardPlayable(selectedCard, game.board) : false
+  const canBurn = myTurn && selectedCard ? !isPlayableFor(selectedCard, game.board, myTeam) && game.deckCount > 0 : false
   const winnerTeam = game.winner
 
   return (
@@ -210,6 +209,8 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
               hasBurned={myTurn && game.hasBurnedThisTurn}
               selectedCard={selectedCard}
               jokerActionMode={jokerAction}
+              canPass={myTurn && game.canPass}
+              onPass={() => send({ type: 'pass' })}
             />
           </div>
           <div className="flex sm:flex-col items-center gap-2 justify-center">

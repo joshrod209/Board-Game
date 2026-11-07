@@ -8,7 +8,7 @@ import { detectScores, capScore, checkWinCondition, validateCappedChipsInScore, 
 import { initializeDeck } from '@/gameCore/deck'
 import { createHand } from '@/gameCore/hand'
 import { canPlayCard, playCard as validatePlayCard } from '@/gameCore/playCard'
-import { isCardPlayable, burnCard } from '@/gameCore/burnRule'
+import { isPlayableFor, canPassWith, type Team } from '@/gameCore/engine'
 import { wildCardAddChip, wildCardRemoveChip } from '@/gameCore/jokerLogic'
 import { debugLog } from '@/gameCore/debug'
 import BoardCell from './BoardCell'
@@ -152,19 +152,20 @@ export default function Board() {
       return
     }
     
-    // Validate card is unplayable
-    if (isCardPlayable(selectedCard, board)) {
+    // Validate card is unplayable (for this player: a one-eyed jack only
+    // counts as playable when there's an opponent chip it could remove)
+    if (isPlayableFor(selectedCard, board, currentPlayer as Team)) {
       debugLog('Card is playable. Cannot burn playable cards. Play the card instead.')
       return
     }
     
     // Execute burn: remove card and draw new one
-    const burnResult = burnCard(selectedCard, board, deck)
-    
-    if (!burnResult.success) {
-      console.error(`Burn failed: ${burnResult.error}`)
+    const newCard = deck.draw()
+    if (!newCard) {
+      debugLog('Deck is empty - cannot burn')
       return
     }
+    const burnResult = { newCard }
     
     // Remove burned card from hand
     const removedCard = currentHand.removeCard(selectedCard.id)
@@ -988,6 +989,20 @@ export default function Board() {
     setJokerActionMode(null)
   }
   
+  /**
+   * Pass: allowed when none of the current player's regular cards can be
+   * played (wild cards are optional; burning first is optional too).
+   */
+  const handlePass = () => {
+    if (winner || capMode) return
+    const hand = getCurrentPlayerHand()?.cards ?? []
+    if (!canPassWith(hand, board, currentPlayer as Team)) return
+    setSelectedCard(null)
+    setJokerActionMode(null)
+    setHasBurnedThisTurn(false)
+    setCurrentPlayer(currentPlayer === 'red' ? 'blue' : 'red')
+  }
+  
   // Count scores by color - each unique score (by direction) counts as 1
   const scoreCounts = {
     red: cappedScores.filter(s => s.color === 'red' && s.isCapped).length,
@@ -1034,7 +1049,9 @@ export default function Board() {
             onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
             disabled={!!capMode || !!winner}
             playerColor={currentPlayer === 'red' || currentPlayer === 'blue' ? currentPlayer : 'red'}
-            canBurn={selectedCard ? !isCardPlayable(selectedCard, board) : false}
+            canBurn={selectedCard ? !isPlayableFor(selectedCard, board, currentPlayer as Team) && (deck?.cards.length ?? 0) > 0 : false}
+            canPass={!winner && canPassWith(getCurrentPlayerHand()?.cards ?? [], board, currentPlayer as Team)}
+            onPass={handlePass}
             hasBurned={hasBurnedThisTurn}
             selectedCard={selectedCard}
             jokerActionMode={jokerActionMode}

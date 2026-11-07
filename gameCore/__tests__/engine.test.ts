@@ -17,6 +17,9 @@ import {
   viewFor,
   currentSeat,
   checkCapCell,
+  isPlayableFor,
+  passTurn,
+  turnOptions,
 } from '../engine'
 
 /** Deterministic RNG so deals are repeatable */
@@ -197,6 +200,72 @@ describe('burnCard', () => {
     expect(next.hands.r1).toHaveLength(2)
     expect(currentSeat(next).id).toBe('r1')
     expect(burnCard(next, 'r1', 'test-9c-2').ok).toBe(false)
+  })
+})
+
+describe('burning and passing', () => {
+  /** Board where every square is taken, so no regular card can be played */
+  function fullBoard(state: GameState, color: 'red' | 'blue' = 'red'): GameState {
+    return {
+      ...state,
+      board: state.board.map(r => r.map(c => ({ ...c, chip: c.isCorner ? null : color }))),
+    }
+  }
+  const DEAD_A: Card = { ...NINE_CLUBS, id: 'dead-a' }
+  const DEAD_B: Card = { ...NINE_CLUBS, id: 'dead-b' }
+
+  it('lets you burn a one-eyed jack when only your own chips are on the board', () => {
+    let state = withHand(twoPlayer(), 'r1', [ONE_EYED])
+    state = { ...state, board: state.board.map(r => r.map(c => ({ ...c }))) }
+    state.board[3][3].chip = 'red'
+    expect(isPlayableFor(ONE_EYED, state.board, 'red')).toBe(false)
+    expect(burnCard(state, 'r1', ONE_EYED.id).ok).toBe(true)
+  })
+
+  it("won't let you pass while a regular card can be played", () => {
+    const state = withHand(twoPlayer(), 'r1', [NINE_CLUBS, TWO_EYED])
+    expect(turnOptions(state, 'r1').canPass).toBe(false)
+    expect(viewFor(state, 'r1').canPass).toBe(false)
+    expect(passTurn(state, 'r1').ok).toBe(false)
+  })
+
+  it('burn keeps your turn, then you can pass', () => {
+    let state = withHand(fullBoard(fourPlayer()), 'r1', [DEAD_A, DEAD_B])
+    expect(turnOptions(state, 'r1')).toMatchObject({ canPlay: false, canBurn: true, canPass: true })
+    state = expectOk(burnCard(state, 'r1', DEAD_A.id))
+    expect(currentSeat(state).id).toBe('r1') // turn continues after a burn
+    expect(burnCard(state, 'r1', DEAD_B.id).ok).toBe(false) // once per turn
+    state = withHand(state, 'r1', [DEAD_B]) // keep the hand dead whatever was drawn
+    const next = expectOk(passTurn(state, 'r1'))
+    expect(currentSeat(next).id).toBe('b1')
+    expect(next.hasBurnedThisTurn).toBe(false)
+  })
+
+  it('burning first is optional: a dead hand can pass straight away', () => {
+    const state = withHand(fullBoard(twoPlayer()), 'r1', [DEAD_A])
+    expect(passTurn(state, 'r1').ok).toBe(true)
+  })
+
+  it("wild cards never force a move: you can pass holding playable jacks and jokers", () => {
+    // Opponent chips everywhere: one-eyed jack and joker could both be played
+    const state = withHand(fullBoard(twoPlayer(), 'blue'), 'r1', [ONE_EYED, JOKER, DEAD_A])
+    expect(turnOptions(state, 'r1')).toMatchObject({ canPlay: true, canPass: true })
+    expect(viewFor(state, 'r1').canPass).toBe(true)
+    expect(viewFor(state, 'b1').canPass).toBe(false) // only on your turn
+    expect(passTurn(state, 'b1').ok).toBe(false)
+    expect(currentSeat(expectOk(passTurn(state, 'r1'))).id).toBe('b1')
+  })
+
+  it('a playable wild card cannot be burned', () => {
+    const state = withHand(twoPlayer(), 'r1', [TWO_EYED])
+    expect(burnCard(state, 'r1', TWO_EYED.id).ok).toBe(false)
+  })
+
+  it('you can pass with an empty hand or an empty deck', () => {
+    expect(passTurn(withHand(twoPlayer(), 'r1', []), 'r1').ok).toBe(true)
+    const noDeck = { ...withHand(fullBoard(twoPlayer()), 'r1', [DEAD_A]), deck: [] }
+    expect(turnOptions(noDeck, 'r1').canBurn).toBe(false)
+    expect(passTurn(noDeck, 'r1').ok).toBe(true)
   })
 })
 

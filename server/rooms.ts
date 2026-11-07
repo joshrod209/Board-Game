@@ -15,6 +15,7 @@ import {
   createGame,
   playCard,
   burnCard,
+  passTurn,
   capCells,
   shuffleAndDeal,
   newGame,
@@ -100,6 +101,47 @@ function removeFromRoom(io: IO, room: Room, playerId: string) {
   broadcast(io, room)
 }
 
+/**
+ * Leave a room. In a lobby you're removed; in a started game your seat (and
+ * hand) is kept for you and simply shows as offline until you come back.
+ */
+function leaveRoom(io: IO, room: Room, playerId: string) {
+  playerRooms.delete(playerId)
+  if (room.game) {
+    const me = room.players.find(p => p.id === playerId)
+    if (me) me.connected = false
+    broadcast(io, room)
+  } else {
+    removeFromRoom(io, room, playerId)
+  }
+}
+
+/**
+ * Hand an offline seat to a new player id. Used when someone closes their
+ * tab (losing their id) and reopens the invite link with the same name.
+ */
+function reassignSeat(io: IO, room: Room, oldId: string, newId: string) {
+  const swap = (id: string) => (id === oldId ? newId : id)
+  room.players = room.players.map(p => (p.id === oldId ? { ...p, id: newId, connected: true } : p))
+  room.hostId = swap(room.hostId)
+  if (room.game) {
+    const { [oldId]: hand, ...hands } = room.game.hands
+    room.game = {
+      ...room.game,
+      seats: room.game.seats.map(s => ({ ...s, id: swap(s.id) })),
+      hands: { ...hands, [newId]: hand ?? [] },
+      lastMove: room.game.lastMove ? { ...room.game.lastMove, by: swap(room.game.lastMove.by) } : null,
+    }
+  }
+  playerRooms.delete(oldId)
+  playerRooms.set(newId, room.code)
+  const oldSocket = playerSockets.get(oldId)
+  if (oldSocket) io.sockets.sockets.get(oldSocket)?.disconnect(true)
+  playerSockets.delete(oldId)
+  clearTimeout(lobbyDropTimers.get(oldId))
+  lobbyDropTimers.delete(oldId)
+}
+
 function applyAction(room: Room, playerId: string, action: GameAction): EngineResult {
   const game = room.game!
   switch (action?.type) {
@@ -107,6 +149,8 @@ function applyAction(room: Room, playerId: string, action: GameAction): EngineRe
       return playCard(game, playerId, String(action.cardId), Number(action.row), Number(action.col), action.jokerAction)
     case 'burn':
       return burnCard(game, playerId, String(action.cardId))
+    case 'pass':
+      return passTurn(game, playerId)
     case 'cap':
       if (!Array.isArray(action.cells)) return { ok: false, error: 'Bad cap request' }
       return capCells(
@@ -165,7 +209,7 @@ export function registerRoomHandlers(io: IO) {
       if (!name) return reply(ack, { ok: false, error: 'Enter your name first' })
 
       const current = myRoom()
-      if (current) removeFromRoom(io, current, playerId)
+      if (current) leaveRoom(io, current, playerId)
 
       const room: Room = {
         code: newCode(),
@@ -198,11 +242,29 @@ export function registerRoomHandlers(io: IO) {
       }
 
       if (!name) return reply(ack, { ok: false, error: 'Enter your name first' })
-      if (room.game) return reply(ack, { ok: false, error: 'That game has already started' })
+
+      if (room.game) {
+        // Closed your tab or switched devices? Take back your offline seat by name.
+        const seat = room.players.find(p => !p.connected && p.name.toLowerCase() === name.toLowerCase())
+        if (!seat) {
+          const offline = room.players.filter(p => !p.connected).map(p => p.name)
+          return reply(ack, {
+            ok: false,
+            error: offline.length
+              ? `That game has already started. To take back your seat, join with your name from the game (${offline.join(', ')})`
+              : 'That game has already started',
+          })
+        }
+        const current = myRoom()
+        if (current && current !== room) leaveRoom(io, current, playerId)
+        reassignSeat(io, room, seat.id, playerId)
+        reply(ack, { ok: true, code })
+        return broadcast(io, room)
+      }
       if (room.players.length >= room.size) return reply(ack, { ok: false, error: 'That game is full' })
 
       const current = myRoom()
-      if (current && current !== room) removeFromRoom(io, current, playerId)
+      if (current && current !== room) leaveRoom(io, current, playerId)
 
       const team: Team = teamCount(room, 'red') <= teamCount(room, 'blue') ? 'red' : 'blue'
       room.players.push({ id: playerId, name, team, connected: true })
@@ -243,16 +305,7 @@ export function registerRoomHandlers(io: IO) {
 
     socket.on('room:leave', () => {
       const room = myRoom()
-      if (!room) return
-      if (room.game) {
-        // Keep the seat so the game can continue if they come back
-        const me = room.players.find(p => p.id === playerId)
-        if (me) me.connected = false
-        playerRooms.delete(playerId)
-        broadcast(io, room)
-      } else {
-        removeFromRoom(io, room, playerId)
-      }
+      if (room) leaveRoom(io, room, playerId)
     })
 
     socket.on('game:action', (action, ack) => {

@@ -17,6 +17,8 @@ type HandProps = {
   hasBurned?: boolean // Whether player has already burned this turn
   selectedCard?: Card | null // The actual selected card object (to check wild card type)
   jokerActionMode?: 'add' | 'remove' | null // Current joker action mode
+  canPass?: boolean // No regular card can be played, so the player may pass
+  onPass?: () => void
 }
 
 export default function Hand({ 
@@ -32,6 +34,8 @@ export default function Hand({
   selectedCard,
   jokerActionMode = null,
   title,
+  canPass = false,
+  onPass,
 }: HandProps) {
   if (!hand || hand.cards.length === 0) {
     return (
@@ -69,6 +73,16 @@ export default function Hand({
                   ➖ Remove Chip
                 </button>
               </>
+            )}
+            {/* Pass button: no regular card fits; wild cards are optional */}
+            {canPass && onPass && !disabled && (
+              <button
+                onClick={onPass}
+                className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-xs font-semibold rounded transition-colors"
+                title="None of your regular cards can be played. End your turn without playing."
+              >
+                ⏭ Pass turn
+              </button>
             )}
             {/* Burn button */}
             {selectedCardId && onBurnCard && canBurn && !hasBurned && !disabled && (
@@ -116,6 +130,12 @@ export default function Hand({
         {selectedCardId && canBurn && !hasBurned && (
           <p className="text-xs text-orange-400 mt-1">
             ⚠️ This card is unplayable - you can burn it to draw a new card
+          </p>
+        )}
+        {canPass && onPass && !disabled && (
+          <p className="text-xs text-gray-300 mt-1">
+            No regular card fits on the board. {hasBurned ? '' : 'You can burn a dead card (select it first), '}
+            {hand.cards.some(c => c.wildCardType) ? 'use a wild card, or pass.' : 'or pass.'}
           </p>
         )}
         {hasBurned && (

@@ -26,6 +26,7 @@ export type RoomUpdate = {
 export type GameAction =
   | { type: 'play'; cardId: string; row: number; col: number; jokerAction?: 'add' | 'remove' }
   | { type: 'burn'; cardId: string }
+  | { type: 'pass' }
   | { type: 'cap'; cells: CellPos[] }
   | { type: 'shuffle' }
   | { type: 'newGame' }

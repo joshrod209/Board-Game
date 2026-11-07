@@ -70,11 +70,18 @@ Board Game is a custom Sequence-style board game played on a 10×10 custom board
 - The corner Joker spaces count as wildcards for score detection
 
 #### Burn Rule
-- **File**: `gameCore/burnRule.ts`
-- Once per turn, if your card is truly unplayable:
-  - Can burn (discard) the card
-  - Draw a new card
-- Only if the card cannot be played anywhere
+- **File**: `gameCore/engine.ts` (`burnCard`, `isPlayableFor`)
+- Once per turn, if a card in your hand can't be played anywhere on the board, you may burn it: discard it and draw a new card
+- Your turn continues after burning, so you can play the new card (or another card)
+- A one-eyed Jack counts as unplayable when there's no uncapped opponent chip to remove
+- Burning is optional
+
+#### Passing
+- **File**: `gameCore/engine.ts` (`passTurn`, `canPassWith`)
+- You may pass when none of your regular (non-wild) cards can be played
+- Wild cards (Jacks and Jokers) never force a move: you can pass while holding them
+- You can't pass while a regular card in your hand fits an open square
+- A Pass turn button appears when passing is allowed
 
 #### Card Playing
 - **File**: `gameCore/playCard.ts`
