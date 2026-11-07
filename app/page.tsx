@@ -44,7 +44,7 @@ export default function Home() {
     <main className="min-h-screen bg-gray-900 px-4 py-10 sm:py-16">
       <div className="max-w-md mx-auto space-y-6">
         <header className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-white">Quad Sequence</h1>
+          <h1 className="text-4xl font-bold text-white">Board Game</h1>
           <p className="text-gray-400">Line up 5 chips. Cap 4 scores. Play with friends online.</p>
         </header>
 

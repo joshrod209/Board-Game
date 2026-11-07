@@ -1,6 +1,6 @@
 # Project Structure
 
-This document explains the professional organization of the Quad Sequence game codebase.
+This document explains the professional organization of the Board Game game codebase.
 
 ## 📁 Directory Structure
 

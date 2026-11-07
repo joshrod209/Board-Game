@@ -153,7 +153,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main className="min-h-screen bg-gray-900 px-4 py-8">
       <div className="max-w-xl mx-auto space-y-6">
         <h1 className="text-3xl font-bold text-white text-center">
-          <Link href="/">Quad Sequence</Link>
+          <Link href="/">Board Game</Link>
         </h1>
         {children}
       </div>

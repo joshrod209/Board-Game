@@ -1,5 +1,5 @@
 {
-  "name": "quad-sequence",
+  "name": "board-game",
   "version": "0.1.0",
   "description": "A custom Sequence-style board game with strategic gameplay",
   "private": true,

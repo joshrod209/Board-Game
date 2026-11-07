@@ -1,5 +1,5 @@
 /**
- * Board layout for Quad Sequence game
+ * Board layout for Board Game game
  * 10×10 grid with complete card layout
  * Row 5 is the equator where cards flip orientation
  */

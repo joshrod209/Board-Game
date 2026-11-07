@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Quad Sequence',
+  title: 'Board Game',
   description: 'A custom Sequence-style board game',
 }
 

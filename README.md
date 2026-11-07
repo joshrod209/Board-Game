@@ -1,10 +1,10 @@
-# Quad Sequence
+# Board Game
 
 A custom board game implementation based on Sequence, featuring a unique 10x10 card layout and strategic gameplay. Built with Next.js, React, TypeScript, and Tailwind CSS.
 
 ## 🎮 Game Overview
 
-Quad Sequence is a turn-based strategy game where players compete to create sequences of 5 consecutive chips. The game features:
+Board Game is a turn-based strategy game where players compete to create sequences of 5 consecutive chips. The game features:
 
 - **Custom 10x10 Board**: Unique card layout with 4 corner Joker spaces
 - **Strategic Scoring**: Create 5 consecutive chips to score (4 chips + 1 joker OR 5 chips)

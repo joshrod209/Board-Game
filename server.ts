@@ -42,7 +42,7 @@ app.prepare().then(() => {
   })
 
   httpServer.listen(port, hostname, () => {
-    console.log(`\n  Quad Sequence ready${dev ? ' (dev)' : ''}`)
+    console.log(`\n  Board Game ready${dev ? ' (dev)' : ''}`)
     console.log(`  - On this computer: http://localhost:${port}`)
     for (const ip of lanAddresses()) console.log(`  - Same Wi-Fi:       http://${ip}:${port}`)
     console.log('')

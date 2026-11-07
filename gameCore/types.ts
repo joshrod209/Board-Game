@@ -1,5 +1,5 @@
 /**
- * Centralized type definitions for Quad Sequence game
+ * Centralized type definitions for Board Game game
  */
 
 // Board Types

@@ -1,7 +1,7 @@
-# Quad Sequence Game Rules
+# Board Game Game Rules
 
 ## Overview
-Quad Sequence is a custom Sequence-style board game played on a 10×10 custom board with a mirrored layout. Players compete to create scores by placing chips on matching card positions.
+Board Game is a custom Sequence-style board game played on a 10×10 custom board with a mirrored layout. Players compete to create scores by placing chips on matching card positions.
 
 ## Game Board
 

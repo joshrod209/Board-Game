@@ -1,5 +1,5 @@
 /**
- * Deck management for Quad Sequence
+ * Deck management for Board Game
  * Standard 52-card deck × 2 = 104 cards + 4 jokers = 108 cards
  */
 

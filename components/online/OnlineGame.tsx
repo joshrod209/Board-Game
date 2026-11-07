@@ -150,7 +150,7 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
         {/* Header */}
         <div className="flex items-center justify-between gap-2">
           <button onClick={onLeave} className="text-sm text-gray-400 hover:text-white">← Leave</button>
-          <h1 className="text-xl sm:text-2xl font-bold text-white">Quad Sequence</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Board Game</h1>
           <span className="text-xs sm:text-sm font-mono text-gray-400">Code {room.code}</span>
         </div>
 
