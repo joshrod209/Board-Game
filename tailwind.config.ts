@@ -7,7 +7,12 @@ const config: Config = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      screens: {
+        // A phone held sideways: too short for the stacked layout
+        lp: { raw: '(orientation: landscape) and (max-height: 500px)' },
+      },
+    },
   },
   plugins: [],
 }

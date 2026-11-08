@@ -9,6 +9,7 @@ import { initializeDeck } from '@/gameCore/deck'
 import { createHand } from '@/gameCore/hand'
 import { canPlayCard, playCard as validatePlayCard } from '@/gameCore/playCard'
 import { isPlayableFor, canPassWith, cardLabel, CAP_MESSAGES, type Team } from '@/gameCore/engine'
+import { GAME_BOARD } from './gameLayout'
 import { wildCardAddChip, wildCardRemoveChip } from '@/gameCore/jokerLogic'
 import { debugLog } from '@/gameCore/debug'
 import BoardCell from './BoardCell'
@@ -1178,7 +1179,7 @@ export default function Board() {
   ) : null
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-3">
+    <div className="w-full max-w-4xl mx-auto space-y-3 lp:contents lp:space-y-0">
       {/* Scoreboard (shared with online games) */}
       <Scoreboard
         red={{ score: scoreCounts.red, active: currentPlayer === 'red' && !winner, won: winner === 'red' }}
@@ -1227,7 +1228,7 @@ export default function Board() {
 
       {/* Board: the outline glows in the color of the team whose turn it is */}
       <div
-        className={`grid gap-0.5 sm:gap-1 p-1.5 sm:p-4 bg-gray-800 rounded-lg ${
+        className={`${GAME_BOARD} ${
           !winner && !capping ? (currentPlayer === 'red' ? 'ring-2 ring-red-500/60' : 'ring-2 ring-blue-500/60') : ''
         }`}
         style={{

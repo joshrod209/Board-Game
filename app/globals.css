@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fills the strips beside the notch when a phone is held sideways */
+body {
+  background: #111827;
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -128,6 +133,20 @@
   from {
     opacity: 0;
     transform: translateY(70px) scale(0.85);
+  }
+}
+
+/* Phone held sideways: a shorter fan so the hand fits beside the board */
+@media (orientation: landscape) and (max-height: 500px) {
+  .hand-fan {
+    padding: 1.25rem 0.5rem 0.25rem;
+  }
+  .hand-card:not(:disabled):hover,
+  .hand-card:not(:disabled):focus-visible {
+    transform: translateY(calc(var(--arc, 0px) - 8px)) rotate(0deg) scale(1.04);
+  }
+  .hand-card[data-selected='true'] {
+    transform: translateY(calc(var(--arc, 0px) - 14px)) rotate(0deg) scale(1.06);
   }
 }
 

@@ -236,9 +236,9 @@ export default function Hand({
 
   if (!hand || hand.cards.length === 0) {
     return (
-      <div className="bg-gray-800 rounded-lg p-4 space-y-2">
+      <div className="bg-gray-800 rounded-lg p-4 lp:p-1.5 space-y-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <h3 className={`text-sm font-bold ${playerColor === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
+          <h3 className={`text-sm font-bold lp:hidden ${playerColor === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
             {title ?? `${playerColor.toUpperCase()} Player's Hand`}
           </h3>
           <div className="flex flex-wrap justify-end gap-2">
@@ -260,10 +260,10 @@ export default function Hand({
   }
 
   return (
-    <div className="relative bg-gray-800 rounded-lg p-4">
+    <div className="relative bg-gray-800 rounded-lg p-4 lp:p-1.5">
       {showTips && (
         <div
-          className="absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-gray-950/70 p-3 backdrop-blur-[1px]"
+          className="absolute lp:fixed inset-0 z-50 flex items-center justify-center rounded-lg bg-gray-950/70 p-3 backdrop-blur-[1px]"
           role="dialog"
           aria-label="Tips"
         >
@@ -290,7 +290,7 @@ export default function Hand({
       )}
       <div className="mb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <h3 className={`text-sm font-bold ${playerColor === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
+          <h3 className={`text-sm font-bold lp:hidden ${playerColor === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
             {title ?? `${playerColor.toUpperCase()} Player's Hand`}
           </h3>
           <div className="flex flex-wrap justify-end gap-2">
@@ -362,7 +362,7 @@ export default function Hand({
               )}
             </p>
             {selectedCard?.wildCardType !== 'joker' && (
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-gray-400 mt-1 lp:hidden">
                 Click a board cell to play
               </p>
             )}
@@ -385,17 +385,17 @@ export default function Hand({
           </p>
         )}
         {hasBurned && (
-          <p className="text-xs text-gray-500 mt-1 italic">
+          <p className="text-xs text-gray-500 mt-1 italic lp:hidden">
             You have already burned a card this turn
           </p>
         )}
         {!selectedCardId && !disabled && (
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-400 mt-1 lp:hidden">
             Select a card from your hand to play
           </p>
         )}
         {disabled && (
-          <p className="text-xs text-gray-500 mt-1 italic">
+          <p className="text-xs text-gray-500 mt-1 italic lp:hidden">
             Card selection disabled
           </p>
         )}
@@ -421,7 +421,7 @@ export default function Hand({
               if (el) slotRefs.current.set(card.id, el)
               else slotRefs.current.delete(card.id)
             }}
-            className={`hand-slot ${i === 0 ? '' : '-ml-3 sm:-ml-4'}`}
+            className={`hand-slot ${i === 0 ? '' : '-ml-3 sm:-ml-4 lp:-ml-2'}`}
             style={{ '--delay': `${i * 60}ms` } as React.CSSProperties}
             onPointerDown={e => onPointerDown(e, card.id)}
             // Stop the browser's own image drag, which would hijack the gesture
@@ -457,7 +457,7 @@ export default function Hand({
             className="rounded px-2 py-0.5 text-gray-300 hover:text-white hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-transparent"
             title="Move your Jacks and Jokers to the right side of your hand"
           >
-            Wilds to the end ⇢
+            Wilds<span className="lp:hidden"> to the end</span> ⇢
           </button>
         )}
         </div>

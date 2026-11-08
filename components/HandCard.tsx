@@ -87,7 +87,7 @@ function HandCard({ card, isSelected, onSelect, disabled = false, index = 0, cou
       aria-label={label}
       title={label}
       style={fanStyle}
-      className="hand-card relative w-16 h-[90px] sm:w-20 sm:h-28 rounded-lg bg-white overflow-hidden cursor-pointer"
+      className="hand-card relative w-16 h-[90px] sm:w-20 sm:h-28 lp:w-12 lp:h-[68px] rounded-lg bg-white overflow-hidden cursor-pointer"
     >
       {/* Card image - use actual playing card image if available, fallback to styled display */}
       {!imageError ? (

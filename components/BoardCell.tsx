@@ -36,9 +36,10 @@ const capperStyle = { imageRendering: 'crisp-edges', backfaceVisibility: 'hidden
 function CapperChip({ color }: { color: ChipColor }) {
   return (
     <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-      <div className="relative w-12 h-12 rounded-full bg-white border-2 border-gray-400 shadow-xl" style={capperStyle}>
+      {/* Sized from the square's height (its short side) so it fits at any board size */}
+      <div className="relative h-[85%] max-h-12 aspect-square flex-none rounded-full bg-white border sm:border-2 border-gray-400 shadow-md sm:shadow-xl" style={capperStyle}>
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className={`w-6 h-6 rounded-full ${color === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
+          <div className={`w-1/2 h-1/2 rounded-full ${color === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
         </div>
       </div>
     </div>

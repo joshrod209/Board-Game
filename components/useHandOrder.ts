@@ -2,19 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Card } from '@/gameCore/types'
-
-/**
- * Lay the cards out in the saved order: cards the player arranged first (in
- * their order), then any new cards on the right. Cards no longer in the hand
- * simply drop out.
- */
-function arrange(cards: Card[], saved: string[] | undefined): Card[] {
-  if (!saved) return cards
-  const byId = new Map(cards.map(c => [c.id, c]))
-  const kept = saved.filter(id => byId.has(id)).map(id => byId.get(id)!)
-  const keptIds = new Set(kept.map(c => c.id))
-  return [...kept, ...cards.filter(c => !keptIds.has(c.id))]
-}
+import { arrangeHand as arrange } from '@/gameCore/hand'
 
 /**
  * Remembers how a player has arranged their hand. Display only: the game
@@ -38,6 +26,20 @@ export function useHandOrder(cards: Card[], orderKey: string, persist = false) {
       // Storage unavailable (private mode): the order just won't survive a refresh
     }
   }, [orderKey, persist, storageKey, saved])
+
+  // Record each hand change, so a card drawn earlier keeps its slot once the
+  // next new card arrives. Must stay after the load above: both updates run in
+  // order, so this one sees the loaded arrangement. A momentarily empty hand
+  // is skipped so it can't wipe a saved order.
+  useEffect(() => {
+    if (cards.length === 0) return
+    setOrders(o => {
+      const prev = o[orderKey]
+      const ids = arrange(cards, prev).map(c => c.id)
+      const unchanged = prev?.length === ids.length && ids.every((id, i) => id === prev[i])
+      return unchanged ? o : { ...o, [orderKey]: ids }
+    })
+  }, [cards, orderKey])
 
   // Save whenever the arrangement changes
   useEffect(() => {

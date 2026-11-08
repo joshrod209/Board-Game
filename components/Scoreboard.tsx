@@ -45,10 +45,10 @@ export default function Scoreboard({ red, blue, status, statusTone, lastEvent }:
   }[statusTone]
 
   return (
-    <section className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 sm:gap-3" aria-label="Scoreboard">
+    <section className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 sm:gap-3 lp:gap-1" aria-label="Scoreboard">
       <TeamPanel team="red" {...red} />
-      <div className="flex min-w-0 max-w-[11rem] sm:max-w-xs flex-col items-center justify-center px-1 text-center">
-        <div className={`text-base sm:text-xl font-extrabold leading-tight ${toneClass}`}>{status}</div>
+      <div className="flex min-w-0 max-w-[11rem] sm:max-w-xs lp:max-w-[7rem] flex-col items-center justify-center px-1 text-center">
+        <div className={`text-base sm:text-xl lp:text-sm font-extrabold leading-tight ${toneClass}`}>{status}</div>
         <div className="mt-0.5 h-4 w-full truncate text-[11px] sm:text-xs text-gray-400">{lastEvent ?? ''}</div>
       </div>
       <TeamPanel team="blue" {...blue} />
@@ -61,7 +61,7 @@ function TeamPanel({ team, score, active, won, members }: TeamInfo & { team: Tea
   const name = isRed ? 'Red' : 'Blue'
   return (
     <div
-      className={`flex items-center gap-2 sm:gap-3 rounded-xl border px-2.5 py-2 sm:px-4 sm:py-3 transition-colors ${
+      className={`flex items-center gap-2 sm:gap-3 rounded-xl border px-2.5 py-2 sm:px-4 sm:py-3 lp:px-2 lp:py-1 transition-colors ${
         isRed ? 'flex-row' : 'flex-row-reverse text-right'
       } ${
         won
@@ -75,7 +75,7 @@ function TeamPanel({ team, score, active, won, members }: TeamInfo & { team: Tea
       aria-label={`${name}: ${score} of ${SCORE_TO_WIN} scores${active ? ', their turn' : ''}`}
     >
       <span
-        className={`hidden sm:block h-8 w-8 shrink-0 rounded-full border-2 border-white/90 shadow ${isRed ? 'bg-red-600' : 'bg-blue-600'}`}
+        className={`hidden sm:block lp:hidden h-8 w-8 shrink-0 rounded-full border-2 border-white/90 shadow ${isRed ? 'bg-red-600' : 'bg-blue-600'}`}
         aria-hidden
       />
       <div className="min-w-0">
@@ -88,10 +88,10 @@ function TeamPanel({ team, score, active, won, members }: TeamInfo & { team: Tea
           )}
         </div>
         <div className={`flex items-baseline gap-1.5 ${isRed ? '' : 'justify-end'}`}>
-          <span className={`text-2xl sm:text-3xl font-extrabold leading-none ${isRed ? 'text-red-500' : 'text-blue-500'}`}>{score}</span>
-          <span className="text-xs text-gray-500">/ {SCORE_TO_WIN}</span>
+          <span className={`text-2xl sm:text-3xl lp:text-lg font-extrabold leading-none ${isRed ? 'text-red-500' : 'text-blue-500'}`}>{score}</span>
+          <span className="text-xs text-gray-500 lp:whitespace-nowrap">/ {SCORE_TO_WIN}</span>
         </div>
-        <div className={`mt-1 flex gap-1 ${isRed ? '' : 'justify-end'}`} aria-hidden>
+        <div className={`mt-1 flex gap-1 lp:hidden ${isRed ? '' : 'justify-end'}`} aria-hidden>
           {Array.from({ length: SCORE_TO_WIN }).map((_, i) => (
             <span
               key={i}
@@ -100,7 +100,7 @@ function TeamPanel({ team, score, active, won, members }: TeamInfo & { team: Tea
           ))}
         </div>
         {members && members.length > 0 && (
-          <ul className={`mt-1 flex flex-wrap gap-x-2 text-[10px] sm:text-xs ${isRed ? '' : 'justify-end'}`}>
+          <ul className={`mt-1 flex flex-wrap gap-x-2 text-[10px] sm:text-xs lp:hidden ${isRed ? '' : 'justify-end'}`}>
             {members.map(m => (
               <li
                 key={m.id}

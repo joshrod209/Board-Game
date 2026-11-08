@@ -55,7 +55,7 @@ export default function PileStrip({ discardPile, deckCount, onOpen, showShuffle,
             <span className="block h-8 w-6 rounded-sm border border-dashed border-gray-600" aria-hidden />
           )}
         </span>
-        <span className="text-[11px] leading-tight">
+        <span className="text-[11px] leading-tight lp:whitespace-nowrap">
           <span className="font-semibold text-gray-300 group-hover:text-white">Discard</span>
           <span className="text-gray-500"> · Deck {deckCount}</span>
         </span>

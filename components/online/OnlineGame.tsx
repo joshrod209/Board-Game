@@ -11,6 +11,7 @@ import HandComponent from '../Hand'
 import PileStrip from '../PileStrip'
 import DiscardPileView from '../DiscardPileView'
 import Scoreboard from '../Scoreboard'
+import { GAME_LAYOUT, GAME_BOARD, GAME_PAGE } from '../gameLayout'
 
 const TEAM_DOT: Record<Team, string> = { red: 'bg-red-600', blue: 'bg-blue-600' }
 
@@ -198,14 +199,14 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
   ) : null
 
   return (
-    <main className="min-h-screen bg-gray-900 px-2 sm:px-4 py-4">
-      <div className="w-full max-w-4xl mx-auto space-y-3">
+    <main className={GAME_PAGE}>
+      <div className={GAME_LAYOUT}>
         {/* Header (matches pass-and-play) */}
         <div className="flex items-center justify-between gap-2">
           <button onClick={onLeave} className="rounded-full px-2.5 py-0.5 text-sm text-gray-400 hover:bg-white/5 hover:text-white">
             ← Leave
           </button>
-          <h1 className="text-xl sm:text-2xl font-bold text-white">Board Game</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-white lp:hidden">Board Game</h1>
           <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[11px] sm:text-xs font-medium text-gray-300">
             Code {room.code}
           </span>
@@ -255,7 +256,7 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
 
         {/* Board */}
         <div
-          className={`grid gap-0.5 sm:gap-1 p-1.5 sm:p-4 bg-gray-800 rounded-lg ${myTurn && !capMode ? 'ring-2 ring-yellow-400/60' : ''} ${farSide ? 'rotate-180' : ''}`}
+          className={`${GAME_BOARD} ${myTurn && !capMode ? 'ring-2 ring-yellow-400/60' : ''} ${farSide ? 'rotate-180' : ''}`}
           data-far-side={farSide}
           style={{
             gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
