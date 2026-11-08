@@ -285,7 +285,7 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
       {toast && (
         <div
           role="status"
-          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[90vw] rounded-lg bg-gray-950/95 border border-gray-700 px-4 py-2 text-sm text-white shadow-xl animate-slideUp"
+          className="fixed safe-bottom-4 left-1/2 -translate-x-1/2 z-40 max-w-[90vw] rounded-lg bg-gray-950/95 border border-gray-700 px-4 py-2 text-sm text-white shadow-xl animate-slideUp"
         >
           {toast}
         </div>
@@ -320,7 +320,7 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
         </div>
       )}
       {winnerTeam && winnerDismissed && (
-        <div className="fixed bottom-4 right-4 z-40">
+        <div className="fixed safe-bottom-4 safe-right-4 z-40">
           <button
             onClick={() => send({ type: 'newGame' })}
             className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg shadow-xl"

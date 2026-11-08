@@ -114,7 +114,7 @@ export default function DiscardPileView({ discardPile, isOpen, onClose }: Discar
 
   return (
     <div 
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn"
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 safe-overlay animate-fadeIn"
       onClick={onClose}
     >
       <div 

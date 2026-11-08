@@ -82,7 +82,7 @@ export default function OnlineRoom({ code }: { code: string }) {
   }
 
   const banner = !connected && (
-    <div className="fixed top-0 inset-x-0 z-50 bg-yellow-600 text-yellow-50 text-center text-sm py-1.5">
+    <div className="fixed top-0 inset-x-0 z-50 bg-yellow-600 text-yellow-50 text-center text-sm pb-1.5 safe-top-pad">
       Connection lost. Reconnecting…
     </div>
   )

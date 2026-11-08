@@ -2,9 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Fills the strips beside the notch when a phone is held sideways */
+/* The page draws edge to edge (viewport-fit: cover), so keep content clear of
+   the notch and home indicator. These are 0 on screens without them. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
 body {
   background: #111827;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
+/* Full-height pages fill what's left, so the padding above can't add a scroll */
+body .min-h-screen {
+  min-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
+}
+
+/* Pinned elements sit outside the body padding, so they add the space themselves */
+.safe-bottom-4 {
+  bottom: calc(1rem + var(--safe-bottom));
+}
+.safe-right-4 {
+  right: calc(1rem + var(--safe-right));
+}
+.safe-top-pad {
+  padding-top: calc(0.375rem + var(--safe-top));
+}
+.safe-overlay {
+  padding: max(1rem, var(--safe-top)) max(1rem, var(--safe-right)) max(1rem, var(--safe-bottom)) max(1rem, var(--safe-left));
 }
 
 @keyframes fadeIn {
@@ -138,6 +166,13 @@ body {
 
 /* Phone held sideways: a shorter fan so the hand fits beside the board */
 @media (orientation: landscape) and (max-height: 500px) {
+  /* As big as the screen height allows (the board is 10:7), leaving 16.5rem for the hand column */
+  .game-board {
+    width: min(
+      calc(100vw - var(--safe-left) - var(--safe-right) - 16.5rem),
+      calc((100dvh - var(--safe-top) - var(--safe-bottom) - 0.5rem) * 10 / 7)
+    );
+  }
   .hand-fan {
     padding: 1.25rem 0.5rem 0.25rem;
   }
