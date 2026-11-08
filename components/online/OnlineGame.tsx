@@ -3,15 +3,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Card } from '@/gameCore/types'
 import { BOARD_SIZE } from '@/gameCore/constants'
-import { type CellPos, type PlayerView, type Team, checkCapCell, hasScoresToCap, isPlayableFor, permanentCapperMap } from '@/gameCore/engine'
+import { type CellPos, type PlayerView, type Team, checkCapCell, hasScoresToCap, permanentCapperMap } from '@/gameCore/engine'
 import type { GameAction, RoomUpdate } from '@/lib/protocol'
 import { api } from '@/lib/socket'
 import BoardCell from '../BoardCell'
 import HandComponent from '../Hand'
 import DiscardPile from '../DiscardPile'
 import DiscardPileView from '../DiscardPileView'
+import Scoreboard from '../Scoreboard'
 
-const TEAM_TEXT: Record<Team, string> = { red: 'text-red-400', blue: 'text-blue-400' }
 const TEAM_DOT: Record<Team, string> = { red: 'bg-red-600', blue: 'bg-blue-600' }
 
 type Props = { room: RoomUpdate; game: PlayerView; onLeave: () => void }
@@ -145,58 +145,47 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
 
   const allHandsEmpty = game.seats.every(s => s.cardCount === 0)
   const canReshuffle = !game.winner && (game.deckCount === 0 || allHandsEmpty)
-  const canBurn = myTurn && selectedCard ? !isPlayableFor(selectedCard, game.board, myTeam) && game.deckCount > 0 : false
+  // Burn is the player's call: the button is there on your turn; the server checks the card is dead
+  const canBurn = myTurn && game.deckCount > 0
   const winnerTeam = game.winner
+
+  const teamInfo = (team: Team) => ({
+    score: scores[team],
+    active: current.team === team && !winnerTeam,
+    won: winnerTeam === team,
+    members: game.seats
+      .filter(seat => seat.team === team)
+      .map(seat => ({
+        id: seat.id,
+        name: seat.name,
+        isTurn: seat.id === game.currentPlayerId && !winnerTeam,
+        isYou: seat.id === game.you,
+        online: connectedById.get(seat.id) ?? false,
+      })),
+  })
 
   return (
     <main className="min-h-screen bg-gray-900 px-2 sm:px-4 py-4">
       <div className="w-full max-w-4xl mx-auto space-y-3">
-        {/* Header */}
+        {/* Header (matches pass-and-play) */}
         <div className="flex items-center justify-between gap-2">
-          <button onClick={onLeave} className="text-sm text-gray-400 hover:text-white">← Leave</button>
+          <button onClick={onLeave} className="rounded-full px-2.5 py-0.5 text-sm text-gray-400 hover:bg-white/5 hover:text-white">
+            ← Leave
+          </button>
           <h1 className="text-xl sm:text-2xl font-bold text-white">Board Game</h1>
-          <span className="text-xs sm:text-sm font-mono text-gray-400">Code {room.code}</span>
+          <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[11px] sm:text-xs font-medium text-gray-300">
+            Code {room.code}
+          </span>
         </div>
 
-        {/* Scores and players */}
-        <section className="bg-gray-800 rounded-lg p-3 space-y-3">
-          <div className="flex items-center justify-around text-center">
-            <div>
-              <div className="text-xs text-gray-300 font-semibold">Red</div>
-              <div className="text-2xl font-bold text-red-500">{scores.red}/4</div>
-            </div>
-            <div className="min-w-0 px-2">
-              <div className={`text-lg font-bold ${myTurn ? 'text-yellow-300' : TEAM_TEXT[current.team]}`}>
-                {winnerTeam ? `${winnerTeam.toUpperCase()} wins!` : myTurn ? 'Your turn!' : `${current.name}'s turn`}
-              </div>
-              {game.lastEvent && <div className="text-xs text-gray-400 truncate">{game.lastEvent}</div>}
-            </div>
-            <div>
-              <div className="text-xs text-gray-300 font-semibold">Blue</div>
-              <div className="text-2xl font-bold text-blue-500">{scores.blue}/4</div>
-            </div>
-          </div>
-          <ol className="flex flex-wrap justify-center gap-2" aria-label="Turn order">
-            {game.seats.map(seat => {
-              const isTurn = seat.id === game.currentPlayerId && !game.winner
-              const online = connectedById.get(seat.id) ?? false
-              return (
-                <li
-                  key={seat.id}
-                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs sm:text-sm text-white transition-colors ${
-                    isTurn ? 'bg-yellow-500/20 ring-2 ring-yellow-400' : 'bg-gray-900/70'
-                  } ${online ? '' : 'opacity-50'}`}
-                >
-                  <span className={`h-2.5 w-2.5 rounded-full ${TEAM_DOT[seat.team]}`} aria-hidden />
-                  <span className="max-w-[7rem] truncate">{seat.name}</span>
-                  {seat.id === game.you && <span className="text-gray-400">(you)</span>}
-                  <span className="text-gray-400">· {seat.cardCount}🂠</span>
-                  {!online && <span className="text-gray-400">offline</span>}
-                </li>
-              )
-            })}
-          </ol>
-        </section>
+        {/* Scoreboard (shared with pass-and-play), with each team's players */}
+        <Scoreboard
+          red={teamInfo('red')}
+          blue={teamInfo('blue')}
+          status={winnerTeam ? `${winnerTeam === 'red' ? 'Red' : 'Blue'} wins!` : myTurn ? 'Your turn!' : `${current.name}'s turn`}
+          statusTone={winnerTeam ? 'win' : myTurn ? 'you' : current.team}
+          lastEvent={game.lastEvent}
+        />
 
         {/* Your hand, deck and discards */}
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-start">

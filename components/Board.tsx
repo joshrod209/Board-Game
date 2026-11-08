@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useLayoutEffect, useRef } from 'react'
 import type { Cell, ChipColor, Score, Deck, Hand, Card } from '@/gameCore/types'
-import { BOARD_SIZE, INITIAL_HAND_SIZE, SCORE_TO_WIN } from '@/gameCore/constants'
+import { BOARD_SIZE, INITIAL_HAND_SIZE } from '@/gameCore/constants'
 import { boardLayout } from '@/gameCore/boardLayout'
 import { detectScores, capScore, checkWinCondition, validateCappedChipsInScore, validateConsecutiveLine } from '@/gameCore/scoreDetection'
 import { initializeDeck } from '@/gameCore/deck'
@@ -15,6 +15,7 @@ import BoardCell from './BoardCell'
 import HandComponent from './Hand'
 import DiscardPile from './DiscardPile'
 import DiscardPileView from './DiscardPileView'
+import Scoreboard from './Scoreboard'
 
 export default function Board() {
   // Track current player (red starts)
@@ -137,6 +138,7 @@ export default function Board() {
   const handleBurnCard = () => {
     if (!selectedCard) {
       debugLog('No card selected to burn')
+      setToast('Select the card you want to burn first')
       return
     }
     
@@ -147,6 +149,7 @@ export default function Board() {
     
     if (hasBurnedThisTurn) {
       debugLog('You have already burned a card this turn. Only one burn per turn allowed.')
+      setToast('You can only burn one card per turn')
       return
     }
     
@@ -166,6 +169,7 @@ export default function Board() {
     // counts as playable when there's an opponent chip it could remove)
     if (isPlayableFor(selectedCard, board, currentPlayer as Team)) {
       debugLog('Card is playable. Cannot burn playable cards. Play the card instead.')
+      setToast(`${cardLabel(selectedCard)} can still be played, so it can't be burned`)
       return
     }
     
@@ -173,6 +177,7 @@ export default function Board() {
     const newCard = deck.draw()
     if (!newCard) {
       debugLog('Deck is empty - cannot burn')
+      setToast('The deck is empty, so there is nothing to draw')
       return
     }
     const burnResult = { newCard }
@@ -1129,33 +1134,14 @@ export default function Board() {
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-3">
-      {/* Scoreboard: both teams on the sides, whose turn in the middle */}
-      <section className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 sm:gap-3" aria-label="Scoreboard">
-        <TeamPanel
-          team="red"
-          score={scoreCounts.red}
-          cards={cardCounts.red}
-          active={currentPlayer === 'red' && !winner}
-          won={winner === 'red'}
-        />
-        <div className="flex min-w-0 max-w-[11rem] sm:max-w-xs flex-col items-center justify-center px-1 text-center">
-          <div
-            className={`text-base sm:text-xl font-extrabold leading-tight ${
-              winner ? 'text-yellow-300' : currentPlayer === 'red' ? 'text-red-400' : 'text-blue-400'
-            }`}
-          >
-            {winner ? `${teamName(winner)} wins!` : `${teamName(currentPlayer)}'s turn`}
-          </div>
-          <div className="mt-0.5 h-4 w-full truncate text-[11px] sm:text-xs text-gray-400">{lastEvent ?? ''}</div>
-        </div>
-        <TeamPanel
-          team="blue"
-          score={scoreCounts.blue}
-          cards={cardCounts.blue}
-          active={currentPlayer === 'blue' && !winner}
-          won={winner === 'blue'}
-        />
-      </section>
+      {/* Scoreboard (shared with online games) */}
+      <Scoreboard
+        red={{ score: scoreCounts.red, active: currentPlayer === 'red' && !winner, won: winner === 'red' }}
+        blue={{ score: scoreCounts.blue, active: currentPlayer === 'blue' && !winner, won: winner === 'blue' }}
+        status={winner ? `${teamName(winner)} wins!` : `${teamName(currentPlayer)}'s turn`}
+        statusTone={winner ? 'win' : currentPlayer === 'red' ? 'red' : 'blue'}
+        lastEvent={lastEvent}
+      />
 
       {/* Current player's hand, deck and discard pile */}
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-start">
@@ -1168,7 +1154,7 @@ export default function Board() {
             onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
             disabled={capping || !!winner}
             playerColor={currentPlayer === 'red' || currentPlayer === 'blue' ? currentPlayer : 'red'}
-            canBurn={selectedCard ? !isPlayableFor(selectedCard, board, currentPlayer as Team) && deckCount > 0 : false}
+            canBurn={deckCount > 0}
             canPass={!winner && canPassWith(getCurrentPlayerHand()?.cards ?? [], board, currentPlayer as Team)}
             onPass={handlePass}
             hasBurned={hasBurnedThisTurn}
@@ -1323,66 +1309,3 @@ export default function Board() {
     </div>
   )
 }
-
-/** One side of the scoreboard: team name, score with progress dots, cards in hand */
-function TeamPanel({
-  team,
-  score,
-  cards,
-  active,
-  won,
-}: {
-  team: 'red' | 'blue'
-  score: number
-  cards: number
-  active: boolean
-  won: boolean
-}) {
-  const isRed = team === 'red'
-  const name = isRed ? 'Red' : 'Blue'
-  return (
-    <div
-      className={`flex items-center gap-2 sm:gap-3 rounded-xl border px-2.5 py-2 sm:px-4 sm:py-3 transition-colors ${
-        isRed ? 'flex-row' : 'flex-row-reverse text-right'
-      } ${
-        won
-          ? 'border-yellow-400 bg-yellow-400/10'
-          : active
-            ? isRed
-              ? 'border-red-500/70 bg-red-500/10 shadow-[0_0_18px_rgba(239,68,68,0.25)]'
-              : 'border-blue-500/70 bg-blue-500/10 shadow-[0_0_18px_rgba(59,130,246,0.25)]'
-            : 'border-white/5 bg-gray-800'
-      }`}
-      aria-label={`${name}: ${score} of ${SCORE_TO_WIN} scores, ${cards} cards${active ? ', their turn' : ''}`}
-    >
-      <span
-        className={`hidden sm:block h-8 w-8 shrink-0 rounded-full border-2 border-white/90 shadow ${isRed ? 'bg-red-600' : 'bg-blue-600'}`}
-        aria-hidden
-      />
-      <div className="min-w-0">
-        <div className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold ${isRed ? 'text-red-300' : 'text-blue-300 justify-end'}`}>
-          {name}
-          {active && (
-            <span className="rounded-full bg-white/10 px-1.5 py-px text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-white">
-              Turn
-            </span>
-          )}
-        </div>
-        <div className="flex items-baseline gap-1.5" style={{ justifyContent: isRed ? 'flex-start' : 'flex-end' }}>
-          <span className={`text-2xl sm:text-3xl font-extrabold leading-none ${isRed ? 'text-red-500' : 'text-blue-500'}`}>{score}</span>
-          <span className="text-xs text-gray-500">/ {SCORE_TO_WIN}</span>
-        </div>
-        <div className={`mt-1 flex gap-1 ${isRed ? '' : 'justify-end'}`} aria-hidden>
-          {Array.from({ length: SCORE_TO_WIN }).map((_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 w-3 sm:w-4 rounded-full ${i < score ? (isRed ? 'bg-red-500' : 'bg-blue-500') : 'bg-white/10'}`}
-            />
-          ))}
-        </div>
-        <div className="mt-1 text-[10px] sm:text-[11px] text-gray-400">{cards} cards</div>
-      </div>
-    </div>
-  )
-}
-

@@ -18,7 +18,7 @@ type HandProps = {
   onJokerActionSelect?: (action: 'add' | 'remove') => void
   disabled?: boolean
   playerColor: 'red' | 'blue'
-  canBurn?: boolean // Whether the selected card can be burned (unplayable)
+  canBurn?: boolean // Show the Burn button (your turn and the deck has cards); the player decides what to burn
   hasBurned?: boolean // Whether player has already burned this turn
   selectedCard?: Card | null // The actual selected card object (to check wild card type)
   jokerActionMode?: 'add' | 'remove' | null // Current joker action mode
@@ -220,7 +220,7 @@ export default function Hand({
       <div className="mb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className={`text-sm font-bold ${playerColor === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
-            {title ?? `${playerColor.toUpperCase()} Player's Hand`} ({hand.cards.length} cards)
+            {title ?? `${playerColor.toUpperCase()} Player's Hand`}
           </h3>
           <div className="flex gap-2">
             {/* Joker action buttons */}
@@ -252,14 +252,21 @@ export default function Hand({
                 ⏭ Pass turn
               </button>
             )}
-            {/* Burn button */}
-            {selectedCardId && onBurnCard && canBurn && !hasBurned && !disabled && (
+            {/* Burn: the player chooses a dead card and burns it (once per turn) */}
+            {onBurnCard && canBurn && !disabled && (
               <button
                 onClick={onBurnCard}
-                className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded transition-colors"
-                title="Burn this unplayable card and draw a new one"
+                disabled={!selectedCardId || hasBurned}
+                className="px-3 py-1 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed text-white text-xs font-semibold rounded transition-colors"
+                title={
+                  hasBurned
+                    ? 'You already burned a card this turn'
+                    : selectedCardId
+                      ? 'Burn the selected card (only a card that can\'t be played anywhere) and draw a new one'
+                      : 'Select a card that can\'t be played anywhere, then burn it to draw a new one'
+                }
               >
-                🔥 Burn Card
+                🔥 Burn
               </button>
             )}
           </div>
@@ -294,11 +301,6 @@ export default function Hand({
               </p>
             )}
           </div>
-        )}
-        {selectedCardId && canBurn && !hasBurned && (
-          <p className="text-xs text-orange-400 mt-1">
-            ⚠️ This card is unplayable - you can burn it to draw a new card
-          </p>
         )}
         {canPass && onPass && !disabled && (
           <p className="text-xs text-gray-300 mt-1">
