@@ -32,9 +32,6 @@ export default function DiscardPile({ discardPile, onClick }: DiscardPileProps) 
   const cardImagePath = getCardImagePath(topCard)
   const isJoker = topCard.suit === 'joker' || topCard.rank === 'Joker'
   
-  // Extract joker index for sizing (similar to HandCard)
-  const jokerIndex = isJoker ? parseInt(topCard.id.split('-')[1] || '0', 10) : -1
-  const isColoredJoker = isJoker && (jokerIndex === 0 || jokerIndex === 1)
 
   return (
     <button
@@ -76,14 +73,7 @@ export default function DiscardPile({ discardPile, onClick }: DiscardPileProps) 
               width={64}
               height={96}
               className="w-full h-full rounded-lg"
-              style={isJoker ? {
-                objectFit: 'cover',
-                objectPosition: isColoredJoker ? 'center center' : 'center 65%', // Lower black/white jokers slightly
-                transform: isColoredJoker ? 'scale(1.12)' : 'scale(1.15)', // Slightly larger for black/white jokers to fill bottom
-              } : {
-                objectFit: 'cover',
-                objectPosition: 'center center',
-              }}
+              style={{ objectFit: 'cover', objectPosition: 'center center' }}
               onError={() => setImageError(true)}
               unoptimized
             />

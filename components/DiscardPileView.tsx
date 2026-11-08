@@ -44,9 +44,6 @@ function DiscardCardItem({ card, index }: { card: Card; index: number }) {
   const cardImagePath = getCardImagePath(card)
   const isJoker = card.suit === 'joker' || card.rank === 'Joker'
   
-  // Extract joker index for sizing
-  const jokerIndex = isJoker ? parseInt(card.id.split('-')[1] || '0', 10) : -1
-  const isColoredJoker = isJoker && (jokerIndex === 0 || jokerIndex === 1)
 
   // Determine wild card type for display
   const isTwoEyedJack = card.wildCardType === 'twoEyedJack'
@@ -67,14 +64,7 @@ function DiscardCardItem({ card, index }: { card: Card; index: number }) {
               width={80}
               height={112}
               className="w-full h-full rounded-lg"
-              style={isJoker ? {
-                objectFit: 'cover',
-                objectPosition: isColoredJoker ? 'center center' : 'center 65%', // Lower black/white jokers slightly
-                transform: isColoredJoker ? 'scale(1.12)' : 'scale(1.15)', // Slightly larger for black/white jokers to fill bottom
-              } : {
-                objectFit: 'cover',
-                objectPosition: 'center center',
-              }}
+              style={{ objectFit: 'cover', objectPosition: 'center center' }}
               onError={() => setImageError(true)}
               unoptimized
             />

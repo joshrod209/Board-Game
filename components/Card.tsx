@@ -1,8 +1,9 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import Image from 'next/image'
 import type { Cell } from '@/gameCore/types'
+import { BOARD_SIZE } from '@/gameCore/constants'
 
 type CardProps = {
   cell: Cell
@@ -44,6 +45,14 @@ const getSuitColor = (suit: Cell['suit']): string => {
 function Card({ cell, className = '' }: CardProps) {
   const isJoker = cell.suit === 'joker' || cell.rank === 'Joker'
   const isCornerJoker = isJoker && cell.isCorner
+  // Every regular square shows its real card, cut in half (falls back to
+  // the drawn rank/suit if the image can't load)
+  const [imageFailed, setImageFailed] = useState(false)
+  const showCardImage = !isJoker && !imageFailed
+  // Like a real table: the top half of the board (rows 0-4, up to and
+  // including the first royal row) faces the player across from you, so
+  // each side reads its own half straight on.
+  const facesFarSide = cell.row < BOARD_SIZE / 2
   const suitColor = getSuitColor(cell.suit)
   const suitSymbol = getSuitSymbol(cell.suit)
 
@@ -75,6 +84,7 @@ function Card({ cell, className = '' }: CardProps) {
         relative overflow-hidden
         shadow-md
         pointer-events-none
+        ${facesFarSide ? 'rotate-180' : ''}
         ${isJoker && !isCornerJoker ? 'bg-gradient-to-br from-purple-100 to-purple-200 border-purple-400' : ''}
         ${className}
       `}
@@ -89,6 +99,32 @@ function Card({ cell, className = '' }: CardProps) {
           className="w-full h-full object-cover rounded-lg"
           unoptimized
         />
+      ) : showCardImage ? (
+        /*
+         * The real card, cut in half: the image keeps its card shape (taller
+         * than the square) and is pinned to the top, so the square shows the
+         * top half with the corner index. A card's top half is ~1.44:1,
+         * which matches the 10:7 squares.
+         */
+        <>
+          <Image
+            src={`/cards/${cell.suit}_${cell.rank}.png`}
+            alt={`${cell.rank} of ${cell.suit}`}
+            width={226}
+            height={314}
+            className="absolute inset-x-0 top-0 w-full h-auto select-none"
+            draggable={false}
+            onError={() => setImageFailed(true)}
+            unoptimized
+          />
+          {/* On phones the card's own corner index is too small to read */}
+          <span
+            className={`sm:hidden absolute top-0 left-0 z-10 rounded-br bg-white/90 px-0.5 font-serif text-[10px] font-bold leading-none tracking-tighter ${suitColor}`}
+          >
+            {cell.rank}
+            {suitSymbol}
+          </span>
+        </>
       ) : isJoker ? (
         <div className="flex flex-col items-center justify-center w-full h-full p-2">
           <div className="text-3xl mb-1">🃏</div>

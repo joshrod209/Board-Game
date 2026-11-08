@@ -3,12 +3,12 @@ import Board from '@/components/Board'
 
 export default function LocalGame() {
   return (
-    <main className="min-h-screen p-4 sm:p-8 bg-gray-900">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+    <main className="min-h-screen bg-gray-900 px-2 sm:px-4 py-4">
+      <div className="w-full max-w-4xl mx-auto space-y-3">
+        <div className="flex items-center justify-between gap-2">
           <Link href="/" className="text-sm text-gray-400 hover:text-white">← Home</Link>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white text-center">Board Game</h1>
-          <span className="text-sm text-gray-500">Pass &amp; play</span>
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Board Game</h1>
+          <span className="text-xs sm:text-sm text-gray-400">Pass &amp; play</span>
         </div>
         <Board />
       </div>

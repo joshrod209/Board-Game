@@ -62,10 +62,6 @@ function HandCard({ card, isSelected, onSelect, disabled = false, index = 0, cou
   const suitColor = getSuitColor(card.suit)
   const suitSymbol = getSuitSymbol(card.suit)
   
-  // Check if this is joker_0 or joker_1 (colored jokers that need larger scale)
-  // Extract joker index from ID (e.g., "joker-0" -> 0, "joker-1" -> 1)
-  const jokerIndex = isJoker ? parseInt(card.id.split('-')[1] || '0', 10) : -1
-  const isColoredJoker = isJoker && (jokerIndex === 0 || jokerIndex === 1)
 
   // Get card image path
   const cardImagePath = getCardImagePath(card)
@@ -102,18 +98,7 @@ function HandCard({ card, isSelected, onSelect, disabled = false, index = 0, cou
             width={80}
             height={112}
             className="w-full h-full rounded-lg"
-            style={isJoker ? {
-              // For joker cards, use cover and scale to fill entire space
-              // joker_0 and joker_1 (colored jokers): scale(1.12) centered
-              // joker_2 and joker_3 (black/white jokers): slightly larger scale anchored from bottom to fill bottom area
-              objectFit: 'cover',
-              objectPosition: isColoredJoker ? 'center center' : 'center 65%', // Lower black/white jokers slightly
-              transform: isColoredJoker ? 'scale(1.12)' : 'scale(1.15)', // Slightly larger for black/white jokers to fill bottom
-            } : {
-              // For regular cards, use cover to fill the entire card space
-              objectFit: 'cover',
-              objectPosition: 'center center',
-            }}
+            style={{ objectFit: 'cover', objectPosition: 'center center' }}
             onError={() => setImageError(true)}
             unoptimized // Allow external images or local files
           />

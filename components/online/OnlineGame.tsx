@@ -19,6 +19,11 @@ type Props = { room: RoomUpdate; game: PlayerView; onLeave: () => void }
 export default function OnlineGame({ room, game, onLeave }: Props) {
   const me = game.seats.find(s => s.id === game.you)!
   const myTeam = me.team
+  // Seating around a real table: R1 and B1 share one side, R2 and B2 the
+  // other (in 2 players, R1 and B1 sit opposite). Players on the far side
+  // see the board turned around so their half of the board faces them.
+  const mySeat = game.seats.findIndex(s => s.id === game.you)
+  const farSide = game.seats.length === 4 ? mySeat >= 2 : mySeat === 1
   const current = game.seats.find(s => s.id === game.currentPlayerId)!
   const myTurn = game.currentPlayerId === game.you && !game.winner
 
@@ -264,7 +269,8 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
 
         {/* Board */}
         <div
-          className={`grid gap-0.5 sm:gap-1 p-1.5 sm:p-4 bg-gray-800 rounded-lg ${myTurn && !capMode ? 'ring-2 ring-yellow-400/60' : ''}`}
+          className={`grid gap-0.5 sm:gap-1 p-1.5 sm:p-4 bg-gray-800 rounded-lg ${myTurn && !capMode ? 'ring-2 ring-yellow-400/60' : ''} ${farSide ? 'rotate-180' : ''}`}
+          data-far-side={farSide}
           style={{
             gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
             gridTemplateRows: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
