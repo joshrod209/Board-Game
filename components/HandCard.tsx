@@ -74,7 +74,7 @@ function HandCard({ card, isSelected, onSelect, disabled = false, index = 0, cou
     '--arc': `${Math.abs(offset) ** 2 * 3}px`,
   } as React.CSSProperties
   const wild = card.wildCardType ? WILD_LABEL[card.wildCardType] : undefined
-  const label = `${card.rank} of ${card.suit === 'joker' ? 'Joker' : card.suit}${
+  const label = `${isJoker ? 'Joker' : `${card.rank} of ${card.suit}`}${
     isTwoEyedJack ? ' (Two-Eyed Jack: place a chip anywhere)' : ''
   }${isOneEyedJack ? ' (One-Eyed Jack: remove an opponent chip)' : ''}${isJoker ? ' (Joker: add or remove a chip)' : ''}`
 
@@ -100,6 +100,7 @@ function HandCard({ card, isSelected, onSelect, disabled = false, index = 0, cou
             className="w-full h-full rounded-lg"
             style={{ objectFit: 'cover', objectPosition: 'center center' }}
             onError={() => setImageError(true)}
+            draggable={false}
             unoptimized // Allow external images or local files
           />
         </div>

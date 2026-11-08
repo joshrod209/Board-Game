@@ -78,7 +78,7 @@
 
 .hand-fan {
   /* Room above for lifted cards, below for the arc */
-  padding: 2.5rem 0.5rem 0.75rem;
+  padding: 2rem 0.5rem 0.5rem;
 }
 
 .hand-slot {
@@ -182,4 +182,28 @@
   .hand-card {
     transition: none;
   }
+}
+
+/* Rearranging the hand by dragging */
+.hand-slot {
+  /* Sideways drags rearrange cards; vertical swipes still scroll the page */
+  touch-action: pan-y;
+  position: relative;
+}
+
+.hand-slot[data-dragging='true'] {
+  z-index: 40;
+  cursor: grabbing;
+}
+
+.hand-slot[data-dragging='true'] .hand-card {
+  transform: translateY(calc(var(--arc, 0px) - 22px)) rotate(0deg) scale(1.08);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.35),
+    0 20px 36px rgba(0, 0, 0, 0.55);
+}
+
+.hand-slot img {
+  -webkit-user-drag: none;
+  user-select: none;
 }

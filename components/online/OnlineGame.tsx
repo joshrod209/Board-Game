@@ -216,6 +216,8 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
               jokerActionMode={jokerAction}
               canPass={myTurn && game.canPass}
               onPass={() => send({ type: 'pass' })}
+              orderKey={`${room.code}:${game.you}`}
+              persistOrder
             />
           </div>
           <div className="flex sm:flex-col items-center gap-2 justify-center">

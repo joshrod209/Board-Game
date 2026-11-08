@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useLayoutEffect, useRef } from 'react'
 import type { Cell, ChipColor, Score, Deck, Hand, Card } from '@/gameCore/types'
-import { BOARD_SIZE, INITIAL_HAND_SIZE } from '@/gameCore/constants'
+import { BOARD_SIZE, INITIAL_HAND_SIZE, SCORE_TO_WIN } from '@/gameCore/constants'
 import { boardLayout } from '@/gameCore/boardLayout'
 import { detectScores, capScore, checkWinCondition, validateCappedChipsInScore, validateConsecutiveLine } from '@/gameCore/scoreDetection'
 import { initializeDeck } from '@/gameCore/deck'
@@ -43,7 +43,8 @@ export default function Board() {
   
   // Track capped scores and cap mode
   const [cappedScores, setCappedScores] = useState<Score[]>([])
-  const [capMode, setCapMode] = useState<ChipColor | null>(null) // Which player is in cap mode
+  const [capMode, setCapMode] = useState<ChipColor | null>(null) // Which team is capping (set by the first chip tapped)
+  const [capArmed, setCapArmed] = useState(false) // "Cap a score" pressed; waiting for the first chip to pick the team
   const [selectedCapCells, setSelectedCapCells] = useState<Array<{ row: number; col: number }>>([]) // Cells selected for capping
   
   // Track winner state
@@ -102,7 +103,7 @@ export default function Board() {
    */
   const handleCardSelect = (card: Card) => {
     // Only allow selecting cards if it's the current player's turn and not in cap mode
-    if (capMode) {
+    if (capMode || capArmed) {
       debugLog('Cannot select cards while in cap mode')
       return
     }
@@ -149,7 +150,7 @@ export default function Board() {
       return
     }
     
-    if (capMode) {
+    if (capMode || capArmed) {
       debugLog('Cannot burn cards while in cap mode')
       return
     }
@@ -333,6 +334,18 @@ export default function Board() {
   }, []) // Empty dependency array - only run on mount
   
   const handleCellClick = (row: number, col: number) => {
+    // Capping, step 1: the first chip tapped decides which team is capping
+    if (capArmed && !capMode) {
+      const cell = board[row][col]
+      if (cell.isCorner || !cell.chip) {
+        setToast('Start with a chip in the line you want to cap')
+        return
+      }
+      setCapMode(cell.chip)
+      setSelectedCapCells([{ row, col }])
+      return
+    }
+    
     // If in cap mode, add this cell to selection
     if (capMode) {
       const cell = board[row][col]
@@ -651,6 +664,7 @@ export default function Board() {
                     // This allows players to cap missed scores from previous turns without losing their current turn
                     if (validUncappedScores.length === 0) {
                       setCapMode(null)
+                      setCapArmed(false)
                       debugLog('Exiting cap mode - player can continue their turn to place a chip')
                     } else {
                       // Keep cap mode active so player can cap additional scores
@@ -1029,7 +1043,7 @@ export default function Board() {
    * played (wild cards are optional; burning first is optional too).
    */
   const handlePass = () => {
-    if (winner || capMode) return
+    if (winner || capMode || capArmed) return
     const hand = getCurrentPlayerHand()?.cards ?? []
     if (!canPassWith(hand, board, currentPlayer as Team)) {
       setToast('You have a regular card you can play, so you cannot pass')
@@ -1062,6 +1076,7 @@ export default function Board() {
     )
     setCappedScores([])
     setCapMode(null)
+    setCapArmed(false)
     setSelectedCapCells([])
     const nextStartingPlayer: ChipColor = startingPlayer === 'red' ? 'blue' : 'red'
     setStartingPlayer(nextStartingPlayer)
@@ -1075,13 +1090,17 @@ export default function Board() {
     initializeGame()
   }
   
-  /** Turn capping on for a team, or off if it's already on */
-  const toggleCapMode = (team: 'red' | 'blue') => {
+  /** Capping is on from "Cap a score" until it's cancelled or nothing is left to cap */
+  const capping = capArmed || capMode !== null
+  
+  /** One button for both teams: the first chip tapped picks the team */
+  const toggleCapping = () => {
     setSelectedCapCells([])
-    if (capMode === team) {
+    if (capping) {
+      setCapArmed(false)
       setCapMode(null)
     } else {
-      setCapMode(team)
+      setCapArmed(true)
       setSelectedCard(null) // Clear any selected card when entering cap mode
       setJokerActionMode(null)
     }
@@ -1104,48 +1123,38 @@ export default function Board() {
   const onCellClick = useCallback((row: number, col: number) => latestHandlers.current.handleCellClick(row, col), [])
   const onCardSelect = useCallback((card: Card) => latestHandlers.current.handleCardSelect(card), [])
 
-  const TEAMS = ['red', 'blue'] as const
   const teamName = (team: ChipColor) => (team === 'red' ? 'Red' : 'Blue')
   const cardCounts = { red: redHand?.cards.length ?? 0, blue: blueHand?.cards.length ?? 0 }
   const deckCount = deck?.cards.length ?? 0
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-3">
-      {/* Scores, whose turn, and the latest move */}
-      <section className="bg-gray-800 rounded-lg p-3 space-y-3">
-        <div className="flex items-center justify-around text-center">
-          <div>
-            <div className="text-xs text-gray-300 font-semibold">Red</div>
-            <div className="text-2xl font-bold text-red-500">{scoreCounts.red}/4</div>
+      {/* Scoreboard: both teams on the sides, whose turn in the middle */}
+      <section className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 sm:gap-3" aria-label="Scoreboard">
+        <TeamPanel
+          team="red"
+          score={scoreCounts.red}
+          cards={cardCounts.red}
+          active={currentPlayer === 'red' && !winner}
+          won={winner === 'red'}
+        />
+        <div className="flex min-w-0 max-w-[11rem] sm:max-w-xs flex-col items-center justify-center px-1 text-center">
+          <div
+            className={`text-base sm:text-xl font-extrabold leading-tight ${
+              winner ? 'text-yellow-300' : currentPlayer === 'red' ? 'text-red-400' : 'text-blue-400'
+            }`}
+          >
+            {winner ? `${teamName(winner)} wins!` : `${teamName(currentPlayer)}'s turn`}
           </div>
-          <div className="min-w-0 px-2">
-            <div className={`text-lg font-bold ${currentPlayer === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
-              {winner ? `${winner.toUpperCase()} wins!` : `${teamName(currentPlayer)}'s turn`}
-            </div>
-            {lastEvent && <div className="text-xs text-gray-400 truncate">{lastEvent}</div>}
-          </div>
-          <div>
-            <div className="text-xs text-gray-300 font-semibold">Blue</div>
-            <div className="text-2xl font-bold text-blue-500">{scoreCounts.blue}/4</div>
-          </div>
+          <div className="mt-0.5 h-4 w-full truncate text-[11px] sm:text-xs text-gray-400">{lastEvent ?? ''}</div>
         </div>
-        <ol className="flex flex-wrap justify-center gap-2" aria-label="Turn order">
-          {TEAMS.map(team => {
-            const isTurn = team === currentPlayer && !winner
-            return (
-              <li
-                key={team}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs sm:text-sm text-white transition-colors ${
-                  isTurn ? 'bg-yellow-500/20 ring-2 ring-yellow-400' : 'bg-gray-900/70'
-                }`}
-              >
-                <span className={`h-2.5 w-2.5 rounded-full ${team === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} aria-hidden />
-                <span>{teamName(team)}</span>
-                <span className="text-gray-400">· {cardCounts[team]}🂠</span>
-              </li>
-            )
-          })}
-        </ol>
+        <TeamPanel
+          team="blue"
+          score={scoreCounts.blue}
+          cards={cardCounts.blue}
+          active={currentPlayer === 'blue' && !winner}
+          won={winner === 'blue'}
+        />
       </section>
 
       {/* Current player's hand, deck and discard pile */}
@@ -1157,7 +1166,7 @@ export default function Board() {
             onCardSelect={onCardSelect}
             onBurnCard={handleBurnCard}
             onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
-            disabled={!!capMode || !!winner}
+            disabled={capping || !!winner}
             playerColor={currentPlayer === 'red' || currentPlayer === 'blue' ? currentPlayer : 'red'}
             canBurn={selectedCard ? !isPlayableFor(selectedCard, board, currentPlayer as Team) && deckCount > 0 : false}
             canPass={!winner && canPassWith(getCurrentPlayerHand()?.cards ?? [], board, currentPlayer as Team)}
@@ -1165,6 +1174,8 @@ export default function Board() {
             hasBurned={hasBurnedThisTurn}
             selectedCard={selectedCard}
             jokerActionMode={jokerActionMode}
+            orderKey={currentPlayer}
+            title={`${teamName(currentPlayer)}'s hand`}
           />
         </div>
         <div className="flex sm:flex-col items-center gap-2 justify-center">
@@ -1173,7 +1184,7 @@ export default function Board() {
           {(!deck || deckCount === 0 || (cardCounts.red === 0 && cardCounts.blue === 0)) && (
             <button
               onClick={shuffleAndDeal}
-              disabled={!!capMode || !!winner}
+              disabled={capping || !!winner}
               className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg"
               title="Shuffle the deck and deal 5 cards to each player"
             >
@@ -1190,34 +1201,43 @@ export default function Board() {
         onClose={() => setShowDiscardPileView(false)}
       />
 
-      {/* Cappers: either team can cap its own lines at any time */}
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        {TEAMS.map(team => (
-          <button
-            key={team}
-            onClick={() => toggleCapMode(team)}
-            disabled={!!winner}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-              capMode === team ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-800 hover:bg-gray-700'
-            }`}
-            title={`Cap a ${team} score: pick 5 squares in a line`}
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white border border-gray-400">
-              <span className={`h-3 w-3 rounded-full ${team === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
-            </span>
-            {capMode === team ? 'Cancel capping' : `Cap a ${team} score`}
-          </button>
-        ))}
+      {/* Capper: one button for both teams; the first chip tapped picks the team */}
+      <div className="flex items-center justify-center">
+        <button
+          onClick={toggleCapping}
+          disabled={!!winner}
+          className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
+            capping ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-800 hover:bg-gray-700'
+          }`}
+          title="Cap a score: tap a chip in the line, then the rest of its 5 squares. Either team can cap at any time."
+        >
+          <span className="flex h-6 w-6 items-center justify-center gap-0.5 rounded-full bg-white border border-gray-400">
+            {capMode ? (
+              <span className={`h-3 w-3 rounded-full ${capMode === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
+            ) : (
+              <>
+                <span className="h-2 w-2 rounded-full bg-red-600" />
+                <span className="h-2 w-2 rounded-full bg-blue-600" />
+              </>
+            )}
+          </span>
+          {capping ? 'Cancel capping' : 'Cap a score'}
+        </button>
       </div>
 
-      {capMode && (
+      {capping && (
         <div className="bg-yellow-900/50 border-2 border-yellow-500 rounded-lg p-2 text-center">
           <div className="text-yellow-200 font-bold text-sm">
-            Capping for {teamName(capMode)}: select 5 squares in a line ({selectedCapCells.length}/5)
+            {capMode
+              ? `Capping for ${teamName(capMode)}: select 5 squares in a line (${selectedCapCells.length}/5)`
+              : 'Capping: tap a chip in the line you want to cap (red or blue)'}
           </div>
           {selectedCapCells.length > 0 && (
             <button
-              onClick={() => setSelectedCapCells([])}
+              onClick={() => {
+                setSelectedCapCells([])
+                setCapMode(null) // stay in capping; the next chip picks the team again
+              }}
               className="mt-2 px-4 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
             >
               Clear selection
@@ -1229,7 +1249,7 @@ export default function Board() {
       {/* Board: the outline glows in the color of the team whose turn it is */}
       <div
         className={`grid gap-0.5 sm:gap-1 p-1.5 sm:p-4 bg-gray-800 rounded-lg ${
-          !winner && !capMode ? (currentPlayer === 'red' ? 'ring-2 ring-red-500/60' : 'ring-2 ring-blue-500/60') : ''
+          !winner && !capping ? (currentPlayer === 'red' ? 'ring-2 ring-red-500/60' : 'ring-2 ring-blue-500/60') : ''
         }`}
         style={{
           gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
@@ -1303,3 +1323,66 @@ export default function Board() {
     </div>
   )
 }
+
+/** One side of the scoreboard: team name, score with progress dots, cards in hand */
+function TeamPanel({
+  team,
+  score,
+  cards,
+  active,
+  won,
+}: {
+  team: 'red' | 'blue'
+  score: number
+  cards: number
+  active: boolean
+  won: boolean
+}) {
+  const isRed = team === 'red'
+  const name = isRed ? 'Red' : 'Blue'
+  return (
+    <div
+      className={`flex items-center gap-2 sm:gap-3 rounded-xl border px-2.5 py-2 sm:px-4 sm:py-3 transition-colors ${
+        isRed ? 'flex-row' : 'flex-row-reverse text-right'
+      } ${
+        won
+          ? 'border-yellow-400 bg-yellow-400/10'
+          : active
+            ? isRed
+              ? 'border-red-500/70 bg-red-500/10 shadow-[0_0_18px_rgba(239,68,68,0.25)]'
+              : 'border-blue-500/70 bg-blue-500/10 shadow-[0_0_18px_rgba(59,130,246,0.25)]'
+            : 'border-white/5 bg-gray-800'
+      }`}
+      aria-label={`${name}: ${score} of ${SCORE_TO_WIN} scores, ${cards} cards${active ? ', their turn' : ''}`}
+    >
+      <span
+        className={`hidden sm:block h-8 w-8 shrink-0 rounded-full border-2 border-white/90 shadow ${isRed ? 'bg-red-600' : 'bg-blue-600'}`}
+        aria-hidden
+      />
+      <div className="min-w-0">
+        <div className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold ${isRed ? 'text-red-300' : 'text-blue-300 justify-end'}`}>
+          {name}
+          {active && (
+            <span className="rounded-full bg-white/10 px-1.5 py-px text-[9px] sm:text-[10px] font-bold uppercase tracking-wide text-white">
+              Turn
+            </span>
+          )}
+        </div>
+        <div className="flex items-baseline gap-1.5" style={{ justifyContent: isRed ? 'flex-start' : 'flex-end' }}>
+          <span className={`text-2xl sm:text-3xl font-extrabold leading-none ${isRed ? 'text-red-500' : 'text-blue-500'}`}>{score}</span>
+          <span className="text-xs text-gray-500">/ {SCORE_TO_WIN}</span>
+        </div>
+        <div className={`mt-1 flex gap-1 ${isRed ? '' : 'justify-end'}`} aria-hidden>
+          {Array.from({ length: SCORE_TO_WIN }).map((_, i) => (
+            <span
+              key={i}
+              className={`h-1.5 w-3 sm:w-4 rounded-full ${i < score ? (isRed ? 'bg-red-500' : 'bg-blue-500') : 'bg-white/10'}`}
+            />
+          ))}
+        </div>
+        <div className="mt-1 text-[10px] sm:text-[11px] text-gray-400">{cards} cards</div>
+      </div>
+    </div>
+  )
+}
+
