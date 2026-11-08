@@ -252,7 +252,7 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
 
         {/* Board */}
         <div
-          className={`${GAME_BOARD} ${myTurn && !capMode ? 'ring-2 ring-yellow-400/60' : ''} ${farSide ? 'rotate-180' : ''}`}
+          className={`${GAME_BOARD} ${!game.winner && !capMode ? (current.team === 'red' ? 'ring-2 ring-red-500/60' : 'ring-2 ring-blue-500/60') : ''} ${farSide ? 'rotate-180' : ''}`}
           data-far-side={farSide}
           style={{
             gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
