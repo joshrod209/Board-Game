@@ -10,6 +10,16 @@ type HandCardProps = {
   isSelected: boolean
   onSelect: (card: CardType) => void
   disabled?: boolean
+  /** Position in the hand, used to fan the cards along an arc */
+  index?: number
+  count?: number
+}
+
+/** Small label telling you what a wild card does */
+const WILD_LABEL: Record<string, { text: string; className: string }> = {
+  twoEyedJack: { text: 'ADD', className: 'bg-blue-600' },
+  oneEyedJack: { text: 'REMOVE', className: 'bg-purple-600' },
+  joker: { text: 'WILD', className: 'bg-fuchsia-600' },
 }
 
 const getSuitSymbol = (suit: CardType['suit']): string => {
@@ -44,7 +54,7 @@ const getSuitColor = (suit: CardType['suit']): string => {
   }
 }
 
-function HandCard({ card, isSelected, onSelect, disabled = false }: HandCardProps) {
+function HandCard({ card, isSelected, onSelect, disabled = false, index = 0, count = 1 }: HandCardProps) {
   const [imageError, setImageError] = useState(false)
   const isJoker = card.suit === 'joker' || card.rank === 'Joker'
   const isTwoEyedJack = card.wildCardType === 'twoEyedJack'
@@ -57,41 +67,31 @@ function HandCard({ card, isSelected, onSelect, disabled = false }: HandCardProp
   const jokerIndex = isJoker ? parseInt(card.id.split('-')[1] || '0', 10) : -1
   const isColoredJoker = isJoker && (jokerIndex === 0 || jokerIndex === 1)
 
-  // Determine border color based on wild card type
-  let borderColorClass = 'border-gray-400'
-  if (isTwoEyedJack) {
-    borderColorClass = 'border-blue-400'
-  } else if (isOneEyedJack) {
-    borderColorClass = 'border-purple-400'
-  } else if (isJoker) {
-    borderColorClass = 'border-purple-400'
-  }
-
   // Get card image path
   const cardImagePath = getCardImagePath(card)
+
+  // Fan the hand: tilt each card away from the middle and drop the outer
+  // cards a little so the hand curves like one held in real life
+  const offset = index - (count - 1) / 2
+  const fanStyle = {
+    '--rot': `${offset * 6}deg`,
+    '--arc': `${Math.abs(offset) ** 2 * 3}px`,
+  } as React.CSSProperties
+  const wild = card.wildCardType ? WILD_LABEL[card.wildCardType] : undefined
+  const label = `${card.rank} of ${card.suit === 'joker' ? 'Joker' : card.suit}${
+    isTwoEyedJack ? ' (Two-Eyed Jack: place a chip anywhere)' : ''
+  }${isOneEyedJack ? ' (One-Eyed Jack: remove an opponent chip)' : ''}${isJoker ? ' (Joker: add or remove a chip)' : ''}`
 
   return (
     <button
       onClick={() => !disabled && onSelect(card)}
       disabled={disabled}
-      className={`
-        relative w-20 h-28 rounded-lg
-        bg-white border-2 transition-all
-        flex items-center justify-center
-        shadow-md hover:shadow-lg overflow-hidden
-        ${isJoker && !isSelected ? 'bg-white' : ''}
-        ${isSelected 
-          ? 'border-yellow-400 ring-2 ring-yellow-400 scale-110 z-10' 
-          : `${borderColorClass} hover:border-opacity-70`
-        }
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105'}
-      `}
-      title={`
-        ${card.rank} of ${card.suit === 'joker' ? 'Joker' : card.suit}
-        ${isTwoEyedJack ? ' (Two-Eyed Jack: Place chip anywhere)' : ''}
-        ${isOneEyedJack ? ' (One-Eyed Jack: Remove opponent chip)' : ''}
-        ${isJoker ? ' (Joker: Add or Remove chip)' : ''}
-      `}
+      data-selected={isSelected}
+      aria-pressed={isSelected}
+      aria-label={label}
+      title={label}
+      style={fanStyle}
+      className="hand-card relative w-16 h-[90px] sm:w-20 sm:h-28 rounded-lg bg-white overflow-hidden cursor-pointer"
     >
       {/* Card image - use actual playing card image if available, fallback to styled display */}
       {!imageError ? (
@@ -226,6 +226,13 @@ function HandCard({ card, isSelected, onSelect, disabled = false }: HandCardProp
             </>
           )}
         </div>
+      )}
+      {wild && (
+        <span
+          className={`absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full px-1.5 py-px text-[8px] sm:text-[9px] font-bold tracking-wide text-white shadow ${wild.className}`}
+        >
+          {wild.text}
+        </span>
       )}
     </button>
   )

@@ -1039,8 +1039,8 @@ export default function Board() {
       </div>
 
       {/* Current player's hand and discard pile */}
-      <div className="flex gap-4 items-start">
-        <div className="flex-1">
+      <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-start">
+        <div className="flex-1 min-w-0">
           <HandComponent
             hand={getCurrentPlayerHand()}
             selectedCardId={selectedCard?.id || null}
@@ -1057,7 +1057,7 @@ export default function Board() {
             jokerActionMode={jokerActionMode}
           />
         </div>
-        <div className="flex-shrink-0 flex flex-col gap-2">
+        <div className="flex-shrink-0 flex sm:flex-col items-center justify-center gap-2">
           {/* Shuffle and Deal button - show when deck is empty or both players have zero cards */}
           {(!deck || 
             deck.cards.length === 0 || 

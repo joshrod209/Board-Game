@@ -154,15 +154,22 @@ export default function Hand({
           </p>
         )}
       </div>
-      <div className="flex gap-2 justify-center flex-wrap">
-        {hand.cards.map(card => (
-          <HandCard
+      <div className="hand-fan flex justify-center" role="group" aria-label="Your cards">
+        {hand.cards.map((card, i) => (
+          <div
             key={card.id}
-            card={card}
-            isSelected={selectedCardId === card.id}
-            onSelect={onCardSelect}
-            disabled={disabled}
-          />
+            className={`hand-slot ${i === 0 ? '' : '-ml-3 sm:-ml-4'}`}
+            style={{ '--delay': `${i * 60}ms` } as React.CSSProperties}
+          >
+            <HandCard
+              card={card}
+              isSelected={selectedCardId === card.id}
+              onSelect={onCardSelect}
+              disabled={disabled}
+              index={i}
+              count={hand.cards.length}
+            />
+          </div>
         ))}
       </div>
     </div>
