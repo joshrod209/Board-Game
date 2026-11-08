@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useLayoutEffect, useRef } from 'react'
-import type { Cell, ChipColor, Score, Deck, Hand, Card } from '@/gameCore/types'
+import type { Cell, ChipColor, Score, Deck, Hand, Card, DiscardedCard } from '@/gameCore/types'
 import { BOARD_SIZE, INITIAL_HAND_SIZE } from '@/gameCore/constants'
 import { boardLayout } from '@/gameCore/boardLayout'
 import { detectScores, capScore, checkWinCondition, validateCappedChipsInScore, validateConsecutiveLine } from '@/gameCore/scoreDetection'
@@ -14,9 +14,13 @@ import { wildCardAddChip, wildCardRemoveChip } from '@/gameCore/jokerLogic'
 import { debugLog } from '@/gameCore/debug'
 import BoardCell from './BoardCell'
 import HandComponent from './Hand'
-import PileStrip from './PileStrip'
-import DiscardPileView from './DiscardPileView'
+import PileStrip, { type PilePlayer } from './PileStrip'
 import Scoreboard from './Scoreboard'
+
+const PILE_PLAYERS: PilePlayer[] = [
+  { id: 'red', name: 'Red', team: 'red' },
+  { id: 'blue', name: 'Blue', team: 'blue' },
+]
 
 export default function Board() {
   // Track current player (red starts)
@@ -60,8 +64,7 @@ export default function Board() {
   const [selectedCard, setSelectedCard] = useState<Card | null>(null) // Currently selected card for playing
   const [hasBurnedThisTurn, setHasBurnedThisTurn] = useState(false) // Track if current player has burned this turn
   const [jokerActionMode, setJokerActionMode] = useState<'add' | 'remove' | null>(null) // For joker cards: which action to take
-  const [discardPile, setDiscardPile] = useState<Card[]>([]) // Discarded cards (most recent first)
-  const [showDiscardPileView, setShowDiscardPileView] = useState(false) // Modal state for viewing full discard pile
+  const [discardPile, setDiscardPile] = useState<DiscardedCard[]>([]) // Discarded cards (most recent first)
   const [lastMove, setLastMove] = useState<{ row: number; col: number } | null>(null) // Square of the latest play (pulses)
   const [lastEvent, setLastEvent] = useState<string | null>(null) // e.g. "Red played 9♦"
   const [toast, setToast] = useState<string | null>(null) // Short message when a move isn't allowed
@@ -191,7 +194,7 @@ export default function Board() {
     }
     
     // Add burned card to discard pile (prepend to keep most recent first)
-    setDiscardPile(prev => [removedCard, ...prev])
+    setDiscardPile(prev => [{ ...removedCard, playedBy: currentPlayer }, ...prev])
     setLastEvent(`${currentPlayer === 'red' ? 'Red' : 'Blue'} burned ${cardLabel(removedCard)}`)
     
     // Add new card to hand
@@ -738,7 +741,7 @@ export default function Board() {
       }
       
       // Add card to discard pile (prepend to keep most recent first)
-      setDiscardPile(prev => [removedCard, ...prev])
+      setDiscardPile(prev => [{ ...removedCard, playedBy: currentPlayer }, ...prev])
       setLastMove({ row, col })
       setLastEvent(`${currentPlayer === 'red' ? 'Red' : 'Blue'} played ${cardLabel(removedCard)}`)
       
@@ -797,7 +800,7 @@ export default function Board() {
       }
       
       // Add card to discard pile (prepend to keep most recent first)
-      setDiscardPile(prev => [removedCard, ...prev])
+      setDiscardPile(prev => [{ ...removedCard, playedBy: currentPlayer }, ...prev])
       setLastMove({ row, col })
       setLastEvent(`${currentPlayer === 'red' ? 'Red' : 'Blue'} removed a ${opponentColor} chip with ${cardLabel(removedCard)}`)
       
@@ -868,7 +871,7 @@ export default function Board() {
         }
         
         // Add card to discard pile (prepend to keep most recent first)
-        setDiscardPile(prev => [removedCard, ...prev])
+        setDiscardPile(prev => [{ ...removedCard, playedBy: currentPlayer }, ...prev])
         setLastMove({ row, col })
         setLastEvent(`${currentPlayer === 'red' ? 'Red' : 'Blue'} played a Joker`)
         
@@ -927,7 +930,7 @@ export default function Board() {
         }
         
         // Add card to discard pile (prepend to keep most recent first)
-        setDiscardPile(prev => [removedCard, ...prev])
+        setDiscardPile(prev => [{ ...removedCard, playedBy: currentPlayer }, ...prev])
         setLastMove({ row, col })
         setLastEvent(`${currentPlayer === 'red' ? 'Red' : 'Blue'} removed a ${opponentColor} chip with a Joker`)
         
@@ -995,7 +998,7 @@ export default function Board() {
     }
     
     // Add card to discard pile (prepend to keep most recent first)
-    setDiscardPile(prev => [removedCard, ...prev])
+    setDiscardPile(prev => [{ ...removedCard, playedBy: currentPlayer }, ...prev])
     setLastMove({ row, col })
     setLastEvent(`${currentPlayer === 'red' ? 'Red' : 'Blue'} played ${cardLabel(removedCard)}`)
     
@@ -1089,7 +1092,6 @@ export default function Board() {
     setCurrentPlayer(nextStartingPlayer)
     setWinner(null)
     setShowWinnerModal(false)
-    setShowDiscardPileView(false)
     setLastMove(null)
     setLastEvent(`New game: ${nextStartingPlayer === 'red' ? 'Red' : 'Blue'} goes first`)
     // Reinitialize deck and hands (also resets the discard pile and burn status)
@@ -1210,20 +1212,14 @@ export default function Board() {
         notice={capNotice}
         pile={
           <PileStrip
+            players={PILE_PLAYERS}
             discardPile={discardPile}
             deckCount={deckCount}
-            onOpen={() => setShowDiscardPileView(true)}
             showShuffle={!deck || deckCount === 0 || (cardCounts.red === 0 && cardCounts.blue === 0)}
             onShuffle={shuffleAndDeal}
             shuffleDisabled={capping || !!winner}
           />
         }
-      />
-
-      <DiscardPileView
-        discardPile={discardPile}
-        isOpen={showDiscardPileView}
-        onClose={() => setShowDiscardPileView(false)}
       />
 
       {/* Board: the outline glows in the color of the team whose turn it is */}

@@ -9,7 +9,6 @@ import { api } from '@/lib/socket'
 import BoardCell from '../BoardCell'
 import HandComponent from '../Hand'
 import PileStrip from '../PileStrip'
-import DiscardPileView from '../DiscardPileView'
 import Scoreboard from '../Scoreboard'
 import { GAME_LAYOUT, GAME_BOARD, GAME_PAGE } from '../gameLayout'
 
@@ -34,7 +33,6 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
   const [capSelection, setCapSelection] = useState<CellPos[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
-  const [showDiscards, setShowDiscards] = useState(false)
   const [winnerDismissed, setWinnerDismissed] = useState(false)
   const justCapped = useRef(false)
 
@@ -243,16 +241,14 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
           notice={capNotice}
           pile={
             <PileStrip
+              players={game.seats}
               discardPile={game.discardPile}
               deckCount={game.deckCount}
-              onOpen={() => setShowDiscards(true)}
               showShuffle={canReshuffle}
               onShuffle={() => send({ type: 'shuffle' })}
             />
           }
         />
-
-        <DiscardPileView discardPile={game.discardPile} isOpen={showDiscards} onClose={() => setShowDiscards(false)} />
 
         {/* Board */}
         <div

@@ -133,14 +133,17 @@ body .min-h-screen {
     0 6px 14px rgba(0, 0, 0, 0.35);
 }
 
-.hand-card:not(:disabled):hover,
-.hand-card:not(:disabled):focus-visible {
-  transform: translateY(calc(var(--arc, 0px) - 16px)) rotate(0deg) scale(1.06);
-  z-index: 20;
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.35),
-    0 16px 30px rgba(0, 0, 0, 0.45);
-  outline: none;
+/* Only with a real pointer: on touch screens hover sticks to the last card touched */
+@media (hover: hover) {
+  .hand-slot:not([data-just-moved='true']) .hand-card:not(:disabled):hover,
+  .hand-card:not(:disabled):focus-visible {
+    transform: translateY(calc(var(--arc, 0px) - 16px)) rotate(0deg) scale(1.06);
+    z-index: 20;
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.35),
+      0 16px 30px rgba(0, 0, 0, 0.45);
+    outline: none;
+  }
 }
 
 .hand-card[data-selected='true'] {
@@ -155,6 +158,19 @@ body .min-h-screen {
 .hand-card:disabled {
   filter: saturate(0.6) brightness(0.8);
   cursor: not-allowed;
+}
+
+/* One player's discards fanning out of their stack */
+.spread-card {
+  animation: spreadOut 0.28s ease-out backwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes spreadOut {
+  from {
+    opacity: 0;
+    transform: translateX(-28px) rotate(-8deg);
+  }
 }
 
 @keyframes cardDeal {
@@ -176,7 +192,7 @@ body .min-h-screen {
   .hand-fan {
     padding: 1.25rem 0.5rem 0.25rem;
   }
-  .hand-card:not(:disabled):hover,
+  .hand-slot:not([data-just-moved='true']) .hand-card:not(:disabled):hover,
   .hand-card:not(:disabled):focus-visible {
     transform: translateY(calc(var(--arc, 0px) - 8px)) rotate(0deg) scale(1.04);
   }
@@ -229,6 +245,7 @@ body .min-h-screen {
 
 @media (prefers-reduced-motion: reduce) {
   .hand-slot,
+  .spread-card,
   .hero-fan-card,
   .hero-float {
     animation: none;

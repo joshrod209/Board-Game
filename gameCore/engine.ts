@@ -9,7 +9,7 @@
  * two per team, seated red, blue, red, blue so turns alternate between teams.
  */
 
-import type { Card, Cell, ChipColor, Score } from './types'
+import type { Card, Cell, ChipColor, DiscardedCard, Score } from './types'
 import { INITIAL_HAND_SIZE } from './constants'
 import { boardLayout } from './boardLayout'
 import { createFullDeck } from './deck'
@@ -47,7 +47,7 @@ export type GameState = {
   deck: Card[]
   hands: Record<string, Card[]>
   /** Most recent first */
-  discardPile: Card[]
+  discardPile: DiscardedCard[]
   cappedScores: Score[]
   turnIndex: number
   startingIndex: number
@@ -207,7 +207,7 @@ function spendCard(state: GameState, playerId: string, card: Card): GameState {
     ...state,
     deck,
     hands: { ...state.hands, [playerId]: hand },
-    discardPile: [card, ...state.discardPile],
+    discardPile: [{ ...card, playedBy: playerId }, ...state.discardPile],
   }
 }
 
@@ -541,7 +541,7 @@ export type PlayerView = {
   seats: Array<Seat & { cardCount: number }>
   board: Cell[][]
   hand: Card[]
-  discardPile: Card[]
+  discardPile: DiscardedCard[]
   deckCount: number
   cappedScores: Score[]
   currentPlayerId: string

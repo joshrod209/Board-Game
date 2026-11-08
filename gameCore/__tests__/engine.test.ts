@@ -94,7 +94,7 @@ describe('playCard', () => {
     expect(next.board[0][1].chip).toBe('red')
     expect(next.hands.r1).toHaveLength(1)
     expect(next.hands.r1[0].id).not.toBe(NINE_CLUBS.id)
-    expect(next.discardPile[0].id).toBe(NINE_CLUBS.id)
+    expect(next.discardPile[0]).toMatchObject({ id: NINE_CLUBS.id, playedBy: 'r1' })
     expect(next.deck).toHaveLength(state.deck.length - 1)
     expect(currentSeat(next).id).toBe('b1')
     expect(next.lastMove).toMatchObject({ row: 0, col: 1, kind: 'add', by: 'r1' })

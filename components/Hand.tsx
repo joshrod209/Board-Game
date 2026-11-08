@@ -75,7 +75,7 @@ export default function Hand({
   const slotRefs = useRef(new Map<string, HTMLDivElement>())
   const drag = useRef<DragState | null>(null)
   const pointerX = useRef(0)
-  const suppressClick = useRef(false)
+  const suppressClickUntil = useRef(0)
   // Slot positions just before a reorder, so the other cards can slide (FLIP)
   const beforeMove = useRef<Map<string, number> | null>(null)
   // The drag listeners live on window for the whole drag, so they read the
@@ -84,6 +84,10 @@ export default function Hand({
   orderedRef.current = ordered
   const moveRef = useRef(move)
   moveRef.current = move
+  const selectedIdRef = useRef(selectedCardId)
+  selectedIdRef.current = selectedCardId
+  const onSelectRef = useRef(onCardSelect)
+  onSelectRef.current = onCardSelect
 
   const slotLeft = (el: HTMLDivElement) => el.offsetLeft
 
@@ -171,10 +175,18 @@ export default function Hand({
         el.removeAttribute('data-dragging')
         el.style.transition = 'transform 0.15s ease'
         el.style.transform = ''
+        // The mouse is still over the card; don't let hover lift it again
+        el.setAttribute('data-just-moved', 'true')
+        el.addEventListener('pointerleave', () => el.removeAttribute('data-just-moved'), { once: true })
       }
-      // The pointerup is followed by a click; don't let it select the card
-      suppressClick.current = true
-      setTimeout(() => (suppressClick.current = false), 0)
+      // The pointerup is followed by a click (later on touch screens); don't
+      // let it select the card
+      suppressClickUntil.current = performance.now() + 400
+      // A card that was just moved goes back to resting, even if it was selected
+      if (selectedIdRef.current === d.id) {
+        const card = orderedRef.current.find(c => c.id === d.id)
+        if (card) onSelectRef.current(card)
+      }
     },
     [onPointerMove]
   )
@@ -254,7 +266,7 @@ export default function Hand({
           </div>
         </div>
         {notice ?? <div className="text-gray-300 text-sm text-center">No cards in hand</div>}
-        {pile && <div className="border-t border-white/5 pt-2">{pile}</div>}
+        {pile && <div className="flex items-center gap-3 border-t border-white/5 pt-2 text-gray-500">{pile}</div>}
       </div>
     )
   }
@@ -408,7 +420,7 @@ export default function Hand({
         role="group"
         aria-label="Your cards (drag to rearrange)"
         onClickCapture={e => {
-          if (suppressClick.current) {
+          if (performance.now() < suppressClickUntil.current) {
             e.stopPropagation()
             e.preventDefault()
           }
@@ -439,7 +451,7 @@ export default function Hand({
           </div>
         ))}
       </div>
-      <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/5 pt-1.5 text-[11px] text-gray-500">
+      <div className="mt-1 flex items-center justify-between gap-2 lp:gap-1 border-t border-white/5 pt-1.5 text-[11px] text-gray-500">
         <div className="flex min-w-0 items-center gap-3">{pile}</div>
         <div className="flex shrink-0 items-center gap-1">
           <button
@@ -448,7 +460,7 @@ export default function Hand({
             title="Show tips"
             aria-label="Show tips"
           >
-            ? Tips
+            ?<span className="lp:hidden"> Tips</span>
           </button>
         {wildCount > 0 && wildCount < ordered.length && (
           <button

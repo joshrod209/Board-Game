@@ -45,6 +45,9 @@ export type Card = {
   wildCardType?: WildCardType // Identifies if this is a special wild card and which type
 }
 
+/** A card in the discard pile, and who put it there (a seat id, or a color in pass-and-play) */
+export type DiscardedCard = Card & { playedBy: string }
+
 // Deck Types
 export type Deck = {
   cards: Card[]

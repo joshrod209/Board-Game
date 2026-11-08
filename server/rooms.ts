@@ -130,6 +130,7 @@ function reassignSeat(io: IO, room: Room, oldId: string, newId: string) {
       ...room.game,
       seats: room.game.seats.map(s => ({ ...s, id: swap(s.id) })),
       hands: { ...hands, [newId]: hand ?? [] },
+      discardPile: room.game.discardPile.map(c => ({ ...c, playedBy: swap(c.playedBy) })),
       lastMove: room.game.lastMove ? { ...room.game.lastMove, by: swap(room.game.lastMove.by) } : null,
     }
   }

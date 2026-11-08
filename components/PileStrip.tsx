@@ -1,65 +1,85 @@
 'use client'
 
-import type { Card } from '@/gameCore/types'
+import { useState } from 'react'
+import type { DiscardedCard } from '@/gameCore/types'
 import { getCardImagePath } from '@/gameCore/cardImages'
+import DiscardPileView from './DiscardPileView'
+
+export type PilePlayer = { id: string; name: string; team: 'red' | 'blue' }
 
 type PileStripProps = {
-  discardPile: Card[]
+  /** One discard stack per player, in this order */
+  players: PilePlayer[]
+  discardPile: DiscardedCard[]
   deckCount: number
-  /** Open the full discard pile */
-  onOpen: () => void
   /** Show Shuffle & Deal (deck empty or every hand empty) */
   showShuffle?: boolean
   onShuffle?: () => void
   shuffleDisabled?: boolean
 }
 
+const CARD_SIZE = 'h-8 w-6 lp:h-7 lp:w-5'
+const TEAM_TAG = { red: 'bg-red-600', blue: 'bg-blue-600' }
+
+/** One player's discards, face up with the newest on top */
+function Stack({ player, cards, onOpen }: { player: PilePlayer; cards: DiscardedCard[]; onOpen: () => void }) {
+  const top = cards[0]
+  const count = cards.length
+  const summary = `${player.name}'s discards, ${count} card${count === 1 ? '' : 's'}`
+  return (
+    <button
+      onClick={onOpen}
+      disabled={count === 0}
+      title={summary}
+      aria-label={count ? `${summary}. Show them.` : summary}
+      className="group relative shrink-0 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
+    >
+      {count > 2 && <span className="absolute inset-0 -translate-x-0.5 -rotate-6 rounded-sm bg-white/50" aria-hidden />}
+      {count > 1 && <span className="absolute inset-0 translate-x-0.5 rotate-6 rounded-sm bg-white/75" aria-hidden />}
+      {top ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={getCardImagePath(top)}
+          alt=""
+          draggable={false}
+          className={`relative block rounded-sm object-cover shadow ring-1 ring-black/20 transition-transform group-hover:-translate-y-0.5 ${CARD_SIZE}`}
+        />
+      ) : (
+        <span className={`block rounded-sm border border-dashed border-gray-600 ${CARD_SIZE}`} aria-hidden />
+      )}
+      {count > 0 && (
+        <span className="absolute -right-1.5 -top-1.5 min-w-[1rem] rounded-full bg-gray-950 px-0.5 text-center text-[9px] font-bold leading-4 text-white shadow">
+          {count}
+        </span>
+      )}
+      {/* Whose stack this is */}
+      <span
+        className={`absolute -bottom-1 left-1/2 -translate-x-1/2 rounded px-1 text-[9px] font-bold uppercase leading-3 text-white shadow ${TEAM_TAG[player.team]}`}
+        aria-hidden
+      >
+        {player.name.charAt(0)}
+      </span>
+    </button>
+  )
+}
+
 /**
- * Compact deck + discard pile that sits inside the hand box. Always
- * visible; tapping the discard opens the full pile.
+ * Deck count and a discard stack for each player, inside the hand box.
+ * Tapping a stack spreads that player's cards.
  */
-export default function PileStrip({ discardPile, deckCount, onOpen, showShuffle, onShuffle, shuffleDisabled }: PileStripProps) {
-  const top = discardPile[0]
-  const label = top
-    ? top.suit === 'joker'
-      ? 'Joker'
-      : `${top.rank} of ${top.suit}`
-    : null
+export default function PileStrip({ players, discardPile, deckCount, showShuffle, onShuffle, shuffleDisabled }: PileStripProps) {
+  const [openId, setOpenId] = useState<string | null>(null)
+  const cardsOf = (id: string) => discardPile.filter(c => c.playedBy === id)
+  const open = players.find(p => p.id === openId)
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={onOpen}
-        className="group flex items-center gap-2 rounded-md px-1 py-0.5 text-left hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-yellow-400"
-        title={top ? `Discard pile: ${discardPile.length} card${discardPile.length === 1 ? '' : 's'}, top is ${label}. Tap to see them all.` : 'Discard pile is empty'}
-        aria-label={top ? `Open discard pile (${discardPile.length} card${discardPile.length === 1 ? '' : 's'}, top card ${label})` : 'Open discard pile (empty)'}
-      >
-        <span className="relative">
-          {top ? (
-            <>
-              {discardPile.length > 1 && (
-                <span className="absolute inset-0 translate-x-0.5 translate-y-0.5 rotate-3 rounded bg-white/70" aria-hidden />
-              )}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={getCardImagePath(top)}
-                alt=""
-                draggable={false}
-                className="relative block h-8 w-6 rounded-sm object-cover shadow ring-1 ring-black/20 transition-transform group-hover:-translate-y-0.5"
-              />
-              <span className="absolute -right-1.5 -top-1.5 min-w-[1.1rem] rounded-full bg-blue-600 px-1 text-center text-[9px] font-bold leading-4 text-white shadow">
-                {discardPile.length}
-              </span>
-            </>
-          ) : (
-            <span className="block h-8 w-6 rounded-sm border border-dashed border-gray-600" aria-hidden />
-          )}
-        </span>
-        <span className="text-[11px] leading-tight lp:whitespace-nowrap">
-          <span className="font-semibold text-gray-300 group-hover:text-white">Discard</span>
-          <span className="text-gray-500"> · Deck {deckCount}</span>
-        </span>
-      </button>
+    <>
+      <div className="flex items-center gap-3 lp:gap-2.5 pb-1">
+        {players.map(p => (
+          <Stack key={p.id} player={p} cards={cardsOf(p.id)} onOpen={() => setOpenId(p.id)} />
+        ))}
+      </div>
+      <span className="whitespace-nowrap text-[11px] leading-tight text-gray-500">Deck {deckCount}</span>
       {showShuffle && (
         <button
           onClick={onShuffle}
@@ -70,6 +90,7 @@ export default function PileStrip({ discardPile, deckCount, onOpen, showShuffle,
           🔀 Shuffle &amp; Deal
         </button>
       )}
-    </div>
+      {open && <DiscardPileView player={open} cards={cardsOf(open.id)} onClose={() => setOpenId(null)} />}
+    </>
   )
 }
