@@ -8,7 +8,7 @@ import { detectScores, capScore, checkWinCondition, validateCappedChipsInScore, 
 import { initializeDeck } from '@/gameCore/deck'
 import { createHand } from '@/gameCore/hand'
 import { canPlayCard, playCard as validatePlayCard } from '@/gameCore/playCard'
-import { isPlayableFor, canPassWith, cardLabel, type Team } from '@/gameCore/engine'
+import { isPlayableFor, canPassWith, cardLabel, CAP_MESSAGES, type Team } from '@/gameCore/engine'
 import { wildCardAddChip, wildCardRemoveChip } from '@/gameCore/jokerLogic'
 import { debugLog } from '@/gameCore/debug'
 import BoardCell from './BoardCell'
@@ -411,7 +411,7 @@ export default function Board() {
         if (cell.isCapped && cell.chip === capMode) {
           if (currentlySelectedCappedCount >= 2) {
             debugLog('Cannot select more than 2 capped chips per score. Already have', currentlySelectedCappedCount, 'capped chips selected.')
-            setToast('A score can reuse at most 2 capped chips')
+            setToast(CAP_MESSAGES.tooManyCapped)
             return // Block selection - max 2 capped chips allowed
           }
           
@@ -446,7 +446,7 @@ export default function Board() {
                 debugLog('  First capped cell scores:', Array.from(firstScoreIds))
                 debugLog('  Second capped cell scores:', Array.from(secondScoreIds))
                 debugLog('  Shared scores:', sharedScores)
-                setToast('The 2 capped chips must come from different scores')
+                setToast(CAP_MESSAGES.overlap)
                 return // Block - must be from different scores
               }
               

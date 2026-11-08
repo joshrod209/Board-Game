@@ -394,6 +394,13 @@ export function newGame(state: GameState, playerId: string, rng: Rng = Math.rand
 // Capping
 // ---------------------------------------------------------------------------
 
+/** Messages for cap selections that break the reuse rules (shared with pass-and-play) */
+export const CAP_MESSAGES = {
+  overlap:
+    'That overlaps a score you already capped by 2 chips. A new score can share only 1 chip with each capped score.',
+  tooManyCapped: 'A new score can reuse at most 2 capped chips, one from each of 2 different scores.',
+} as const
+
 /**
  * Can this cell be added to a cap selection? Returns an error message or null.
  * Clients call it on every click for instant feedback; the server re-checks
@@ -422,7 +429,7 @@ export function checkCapCell(
       const sc = board[r][c]
       return sc?.isCapped && sc?.chip === color
     })
-    if (selectedCapped.length >= 2) return 'A score can reuse at most 2 capped chips'
+    if (selectedCapped.length >= 2) return CAP_MESSAGES.tooManyCapped
     if (selectedCapped.length === 1) {
       const first = selectedCapped[0]
       const scoresWith = (r: number, c: number) =>
@@ -433,7 +440,7 @@ export function checkCapCell(
         )
       const a = scoresWith(first.row, first.col)
       const b = scoresWith(row, col)
-      if (Array.from(a).some(id => b.has(id))) return 'The 2 capped chips must come from different scores'
+      if (Array.from(a).some(id => b.has(id))) return CAP_MESSAGES.overlap
     }
   }
   return null
