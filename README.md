@@ -51,9 +51,20 @@ npm run dev
 3. In 4-player games, pick teams in the lobby; turns alternate Red, Blue, Red, Blue and teammates share a chip color.
 4. The host presses **Start game**. Everyone sees chips appear live, and each player sees only their own hand.
 
-Friends on the same Wi-Fi can use the "Same Wi-Fi" address the server prints. To play over the internet,
-deploy to a host that runs a long-lived Node server (e.g. Render or Railway): `npm run build` then `npm start`.
+Friends on the same Wi-Fi can use the "Same Wi-Fi" address the server prints.
 Rooms are kept in memory, so they reset when the server restarts.
+
+### Deploy to Render (public link)
+
+The repo includes a [`render.yaml`](render.yaml) Blueprint, so Render knows how to build and run it.
+
+1. Sign up at [render.com](https://render.com) (signing in with GitHub is easiest).
+2. In the dashboard choose **New → Blueprint**, pick the `Board-Game` repository, and click **Apply**.
+3. Wait for the first deploy (a few minutes). Your link will look like `https://board-game-xxxx.onrender.com`.
+4. Every push to `main` redeploys automatically.
+
+On the free plan the server sleeps after about 15 minutes with no visitors. The next visit takes
+around 30 seconds to wake it, and any games in progress are lost when it sleeps or redeploys.
 
 Pass-and-play on one device is still available at `/local`.
 

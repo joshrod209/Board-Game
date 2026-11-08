@@ -16,6 +16,9 @@
     "typescript"
   ],
   "author": "Josh Rod",
+  "engines": {
+    "node": ">=18.18"
+  },
   "scripts": {
     "dev": "tsx watch --clear-screen=false server.ts",
     "dev:clean": "rm -rf .next && tsx server.ts",
