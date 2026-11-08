@@ -6,8 +6,10 @@ services:
     name: board-game
     runtime: node
     plan: free
-    # Install everything (build needs TypeScript/Tailwind), then build Next.js
-    buildCommand: npm ci && npm run build
+    # Install everything (build needs TypeScript/Tailwind), then build Next.js.
+    # npm install (not npm ci) so a lockfile written by a newer npm on macOS,
+    # which can miss Linux-only optional packages, doesn't fail the build.
+    buildCommand: npm install --no-audit --no-fund && npm run build
     # Runs NODE_ENV=production tsx server.ts; Render provides PORT
     startCommand: npm start
     healthCheckPath: /
