@@ -1,12 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Card } from '@/gameCore/types'
 import HandCard from './HandCard'
 import { useHandOrder } from './useHandOrder'
 
 /** How far a press must travel sideways before it becomes a drag */
 const DRAG_START_PX = 6
+/** Remembered once someone closes the tips screen */
+const TIPS_KEY = 'qs-tips-seen'
 
 type HandProps = {
   hand: { cards: Card[] } | null
@@ -28,6 +30,12 @@ type HandProps = {
   orderKey?: string
   /** Keep the arrangement across page refreshes */
   persistOrder?: boolean
+  /** Extra buttons for the action row (e.g. Cap a score); always shown */
+  actions?: React.ReactNode
+  /** Replaces the usual hints, e.g. capping instructions */
+  notice?: React.ReactNode
+  /** Deck and discard pile, shown in the bottom row of the box */
+  pile?: React.ReactNode
 }
 
 type DragState = {
@@ -56,6 +64,9 @@ export default function Hand({
   onPass,
   orderKey = playerColor,
   persistOrder = false,
+  actions,
+  notice,
+  pile,
 }: HandProps) {
   const cards = hand?.cards ?? EMPTY
   const { ordered, move, wildsToEnd } = useHandOrder(cards, orderKey, persistOrder)
@@ -205,24 +216,85 @@ export default function Hand({
   const wildCount = ordered.filter(c => c.wildCardType).length
   const wildsAlreadyLast = ordered.slice(ordered.length - wildCount).every(c => c.wildCardType)
 
+  // Tips screen: shown automatically the first time, then from the "Tips" button
+  const [showTips, setShowTips] = useState(false)
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(TIPS_KEY)) setShowTips(true)
+    } catch {
+      // Storage unavailable: skip the automatic tips
+    }
+  }, [])
+  const closeTips = () => {
+    setShowTips(false)
+    try {
+      localStorage.setItem(TIPS_KEY, '1')
+    } catch {
+      // ignore
+    }
+  }
+
   if (!hand || hand.cards.length === 0) {
     return (
-      <div className="bg-gray-800 rounded-lg p-4">
-        <div className="text-white text-sm text-center">
-          No cards in hand
+      <div className="bg-gray-800 rounded-lg p-4 space-y-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className={`text-sm font-bold ${playerColor === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
+            {title ?? `${playerColor.toUpperCase()} Player's Hand`}
+          </h3>
+          <div className="flex flex-wrap justify-end gap-2">
+            {actions}
+            {canPass && onPass && !disabled && (
+              <button
+                onClick={onPass}
+                className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-xs font-semibold rounded transition-colors"
+              >
+                ⏭ Pass turn
+              </button>
+            )}
+          </div>
         </div>
+        {notice ?? <div className="text-gray-300 text-sm text-center">No cards in hand</div>}
+        {pile && <div className="border-t border-white/5 pt-2">{pile}</div>}
       </div>
     )
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4">
+    <div className="relative bg-gray-800 rounded-lg p-4">
+      {showTips && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center rounded-lg bg-gray-950/70 p-3 backdrop-blur-[1px]"
+          role="dialog"
+          aria-label="Tips"
+        >
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-gray-900 p-4 shadow-2xl animate-slideUp">
+            <h4 className="text-sm font-bold text-white">Quick tips</h4>
+            <ul className="mt-2 space-y-1.5 text-xs text-gray-300">
+              <li>👆 Tap a card, then tap a matching square to play it.</li>
+              <li>↔️ Drag cards left or right to rearrange your hand.</li>
+              <li>⇢ <span className="font-semibold">Wilds to the end</span> moves your Jacks and Jokers to the right.</li>
+              <li>🔥 <span className="font-semibold">Burn</span> swaps a card that can&apos;t be played anywhere (once per turn).</li>
+              <li>🎯 <span className="font-semibold">Cap a score</span>, then tap the 5 squares of your line.</li>
+            </ul>
+            <div className="mt-3 flex justify-end">
+              <button
+                onClick={closeTips}
+                autoFocus
+                className="rounded-lg bg-yellow-500 px-4 py-1.5 text-sm font-semibold text-gray-900 hover:bg-yellow-400"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mb-2">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className={`text-sm font-bold ${playerColor === 'red' ? 'text-red-400' : 'text-blue-400'}`}>
             {title ?? `${playerColor.toUpperCase()} Player's Hand`}
           </h3>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
+            {actions}
             {/* Joker action buttons */}
             {selectedCard?.wildCardType === 'joker' && !jokerActionMode && !disabled && (
               <>
@@ -271,6 +343,10 @@ export default function Hand({
             )}
           </div>
         </div>
+        {notice ? (
+          <div className="mt-1">{notice}</div>
+        ) : (
+          <>
         {selectedCardId && (
           <div className="mt-1">
             <p className="text-xs text-yellow-400">
@@ -323,6 +399,8 @@ export default function Hand({
             Card selection disabled
           </p>
         )}
+          </>
+        )}
       </div>
       <div
         ref={fanRef}
@@ -361,8 +439,17 @@ export default function Hand({
           </div>
         ))}
       </div>
-      <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-gray-500">
-        <span>Drag cards to rearrange your hand</span>
+      <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/5 pt-1.5 text-[11px] text-gray-500">
+        <div className="flex min-w-0 items-center gap-3">{pile}</div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            onClick={() => setShowTips(true)}
+            className="rounded px-2 py-0.5 text-gray-400 hover:bg-gray-700 hover:text-white"
+            title="Show tips"
+            aria-label="Show tips"
+          >
+            ? Tips
+          </button>
         {wildCount > 0 && wildCount < ordered.length && (
           <button
             onClick={wildsToEnd}
@@ -373,6 +460,7 @@ export default function Hand({
             Wilds to the end ⇢
           </button>
         )}
+        </div>
       </div>
     </div>
   )

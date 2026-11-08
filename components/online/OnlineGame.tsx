@@ -8,7 +8,7 @@ import type { GameAction, RoomUpdate } from '@/lib/protocol'
 import { api } from '@/lib/socket'
 import BoardCell from '../BoardCell'
 import HandComponent from '../Hand'
-import DiscardPile from '../DiscardPile'
+import PileStrip from '../PileStrip'
 import DiscardPileView from '../DiscardPileView'
 import Scoreboard from '../Scoreboard'
 
@@ -164,6 +164,39 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
       })),
   })
 
+  // "Cap a score" lives in the hand box's action row (more room for the board)
+  const capButton = (
+    <button
+      onClick={toggleCapMode}
+      disabled={!!game.winner}
+      className={`flex items-center gap-1.5 rounded px-3 py-1 text-xs font-semibold text-white transition-colors disabled:opacity-50 ${
+        capMode ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-700 hover:bg-gray-600'
+      }`}
+      title="Cap a score: pick 5 squares in a line. You can cap on anyone's turn."
+    >
+      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-white">
+        <span className={`h-2 w-2 rounded-full ${TEAM_DOT[myTeam]}`} />
+      </span>
+      {capMode ? 'Cancel capping' : 'Cap a score'}
+    </button>
+  )
+
+  const capNotice = capMode ? (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-yellow-500/60 bg-yellow-900/40 px-2 py-1.5">
+      <span className="text-xs font-semibold text-yellow-200">
+        Capping for {myTeam === 'red' ? 'Red' : 'Blue'}: select 5 squares in a line ({capSelection.length}/5). You can cap on anyone&apos;s turn.
+      </span>
+      {capSelection.length > 0 && (
+        <button
+          onClick={() => setCapSelection([])}
+          className="rounded bg-red-600 px-2 py-0.5 text-xs text-white hover:bg-red-700"
+        >
+          Clear selection
+        </button>
+      )}
+    </div>
+  ) : null
+
   return (
     <main className="min-h-screen bg-gray-900 px-2 sm:px-4 py-4">
       <div className="w-full max-w-4xl mx-auto space-y-3">
@@ -187,76 +220,38 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
           lastEvent={game.lastEvent}
         />
 
-        {/* Your hand, deck and discards */}
-        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-start">
-          <div className="flex-1 min-w-0">
-            <HandComponent
-              hand={{ cards: game.hand }}
-              title={`Your hand · ${myTeam} team`}
-              selectedCardId={selectedCardId}
-              onCardSelect={onCardSelect}
-              onBurnCard={() => selectedCard && send({ type: 'burn', cardId: selectedCard.id })}
-              onJokerActionSelect={setJokerAction}
-              disabled={capMode || !!game.winner}
-              playerColor={myTeam}
-              canBurn={canBurn}
-              hasBurned={myTurn && game.hasBurnedThisTurn}
-              selectedCard={selectedCard}
-              jokerActionMode={jokerAction}
-              canPass={myTurn && game.canPass}
-              onPass={() => send({ type: 'pass' })}
-              orderKey={`${room.code}:${game.you}`}
-              persistOrder
+        {/* Your hand, with the deck and discard pile tucked into its bottom row */}
+        <HandComponent
+          hand={{ cards: game.hand }}
+          title={`Your hand · ${myTeam} team`}
+          selectedCardId={selectedCardId}
+          onCardSelect={onCardSelect}
+          onBurnCard={() => selectedCard && send({ type: 'burn', cardId: selectedCard.id })}
+          onJokerActionSelect={setJokerAction}
+          disabled={capMode || !!game.winner}
+          playerColor={myTeam}
+          canBurn={canBurn}
+          hasBurned={myTurn && game.hasBurnedThisTurn}
+          selectedCard={selectedCard}
+          jokerActionMode={jokerAction}
+          canPass={myTurn && game.canPass}
+          onPass={() => send({ type: 'pass' })}
+          orderKey={`${room.code}:${game.you}`}
+          persistOrder
+          actions={capButton}
+          notice={capNotice}
+          pile={
+            <PileStrip
+              discardPile={game.discardPile}
+              deckCount={game.deckCount}
+              onOpen={() => setShowDiscards(true)}
+              showShuffle={canReshuffle}
+              onShuffle={() => send({ type: 'shuffle' })}
             />
-          </div>
-          <div className="flex sm:flex-col items-center gap-2 justify-center">
-            <div className="text-xs text-gray-400">Deck: {game.deckCount}</div>
-            {canReshuffle && (
-              <button
-                onClick={() => send({ type: 'shuffle' })}
-                className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg"
-              >
-                🔀 Shuffle &amp; Deal
-              </button>
-            )}
-            <DiscardPile discardPile={game.discardPile} onClick={() => setShowDiscards(true)} />
-          </div>
-        </div>
+          }
+        />
 
         <DiscardPileView discardPile={game.discardPile} isOpen={showDiscards} onClose={() => setShowDiscards(false)} />
-
-        {/* Capper */}
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={toggleCapMode}
-            disabled={!!game.winner}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-              capMode ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-800 hover:bg-gray-700'
-            }`}
-            title="Cap a score: pick 5 squares in a line"
-          >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white border border-gray-400">
-              <span className={`h-3 w-3 rounded-full ${TEAM_DOT[myTeam]}`} />
-            </span>
-            {capMode ? 'Cancel capping' : `Cap a ${myTeam} score`}
-          </button>
-        </div>
-
-        {capMode && (
-          <div className="bg-yellow-900/50 border-2 border-yellow-500 rounded-lg p-2 text-center">
-            <div className="text-yellow-200 font-bold text-sm">
-              Select 5 squares in a line to cap ({capSelection.length}/5). You can cap on anyone&apos;s turn.
-            </div>
-            {capSelection.length > 0 && (
-              <button
-                onClick={() => setCapSelection([])}
-                className="mt-2 px-4 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
-              >
-                Clear selection
-              </button>
-            )}
-          </div>
-        )}
 
         {/* Board */}
         <div

@@ -13,7 +13,7 @@ import { wildCardAddChip, wildCardRemoveChip } from '@/gameCore/jokerLogic'
 import { debugLog } from '@/gameCore/debug'
 import BoardCell from './BoardCell'
 import HandComponent from './Hand'
-import DiscardPile from './DiscardPile'
+import PileStrip from './PileStrip'
 import DiscardPileView from './DiscardPileView'
 import Scoreboard from './Scoreboard'
 
@@ -1132,6 +1132,51 @@ export default function Board() {
   const cardCounts = { red: redHand?.cards.length ?? 0, blue: blueHand?.cards.length ?? 0 }
   const deckCount = deck?.cards.length ?? 0
 
+  // "Cap a score" lives in the hand box's action row (more room for the board)
+  const capButton = (
+    <button
+      onClick={toggleCapping}
+      disabled={!!winner}
+      className={`flex items-center gap-1.5 rounded px-3 py-1 text-xs font-semibold text-white transition-colors disabled:opacity-50 ${
+        capping ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-700 hover:bg-gray-600'
+      }`}
+      title="Cap a score: tap a chip in the line, then the rest of its 5 squares. Either team can cap at any time."
+    >
+      <span className="flex h-4 w-4 items-center justify-center gap-px rounded-full bg-white">
+        {capMode ? (
+          <span className={`h-2 w-2 rounded-full ${capMode === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
+        ) : (
+          <>
+            <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+          </>
+        )}
+      </span>
+      {capping ? 'Cancel capping' : 'Cap a score'}
+    </button>
+  )
+
+  const capNotice = capping ? (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-yellow-500/60 bg-yellow-900/40 px-2 py-1.5">
+      <span className="text-xs font-semibold text-yellow-200">
+        {capMode
+          ? `Capping for ${teamName(capMode)}: select 5 squares in a line (${selectedCapCells.length}/5)`
+          : 'Capping: tap a chip in the line you want to cap (red or blue)'}
+      </span>
+      {selectedCapCells.length > 0 && (
+        <button
+          onClick={() => {
+            setSelectedCapCells([])
+            setCapMode(null) // stay in capping; the next chip picks the team again
+          }}
+          className="rounded bg-red-600 px-2 py-0.5 text-xs text-white hover:bg-red-700"
+        >
+          Clear selection
+        </button>
+      )}
+    </div>
+  ) : null
+
   return (
     <div className="w-full max-w-4xl mx-auto space-y-3">
       {/* Scoreboard (shared with online games) */}
@@ -1143,94 +1188,42 @@ export default function Board() {
         lastEvent={lastEvent}
       />
 
-      {/* Current player's hand, deck and discard pile */}
-      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-start">
-        <div className="flex-1 min-w-0">
-          <HandComponent
-            hand={getCurrentPlayerHand()}
-            selectedCardId={selectedCard?.id || null}
-            onCardSelect={onCardSelect}
-            onBurnCard={handleBurnCard}
-            onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
-            disabled={capping || !!winner}
-            playerColor={currentPlayer === 'red' || currentPlayer === 'blue' ? currentPlayer : 'red'}
-            canBurn={deckCount > 0}
-            canPass={!winner && canPassWith(getCurrentPlayerHand()?.cards ?? [], board, currentPlayer as Team)}
-            onPass={handlePass}
-            hasBurned={hasBurnedThisTurn}
-            selectedCard={selectedCard}
-            jokerActionMode={jokerActionMode}
-            orderKey={currentPlayer}
-            title={`${teamName(currentPlayer)}'s hand`}
+      {/* Current player's hand, with the deck and discard pile tucked into its bottom row */}
+      <HandComponent
+        hand={getCurrentPlayerHand()}
+        selectedCardId={selectedCard?.id || null}
+        onCardSelect={onCardSelect}
+        onBurnCard={handleBurnCard}
+        onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
+        disabled={capping || !!winner}
+        playerColor={currentPlayer === 'red' || currentPlayer === 'blue' ? currentPlayer : 'red'}
+        canBurn={deckCount > 0}
+        canPass={!winner && canPassWith(getCurrentPlayerHand()?.cards ?? [], board, currentPlayer as Team)}
+        onPass={handlePass}
+        hasBurned={hasBurnedThisTurn}
+        selectedCard={selectedCard}
+        jokerActionMode={jokerActionMode}
+        orderKey={currentPlayer}
+        title={`${teamName(currentPlayer)}'s hand`}
+        actions={capButton}
+        notice={capNotice}
+        pile={
+          <PileStrip
+            discardPile={discardPile}
+            deckCount={deckCount}
+            onOpen={() => setShowDiscardPileView(true)}
+            showShuffle={!deck || deckCount === 0 || (cardCounts.red === 0 && cardCounts.blue === 0)}
+            onShuffle={shuffleAndDeal}
+            shuffleDisabled={capping || !!winner}
           />
-        </div>
-        <div className="flex sm:flex-col items-center gap-2 justify-center">
-          <div className="text-xs text-gray-400">Deck: {deckCount}</div>
-          {/* Shuffle and Deal - when the deck is empty or both players are out of cards */}
-          {(!deck || deckCount === 0 || (cardCounts.red === 0 && cardCounts.blue === 0)) && (
-            <button
-              onClick={shuffleAndDeal}
-              disabled={capping || !!winner}
-              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg"
-              title="Shuffle the deck and deal 5 cards to each player"
-            >
-              🔀 Shuffle &amp; Deal
-            </button>
-          )}
-          <DiscardPile discardPile={discardPile} onClick={() => setShowDiscardPileView(true)} />
-        </div>
-      </div>
+        }
+      />
 
       <DiscardPileView
         discardPile={discardPile}
         isOpen={showDiscardPileView}
         onClose={() => setShowDiscardPileView(false)}
       />
-
-      {/* Capper: one button for both teams; the first chip tapped picks the team */}
-      <div className="flex items-center justify-center">
-        <button
-          onClick={toggleCapping}
-          disabled={!!winner}
-          className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-            capping ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-gray-800 hover:bg-gray-700'
-          }`}
-          title="Cap a score: tap a chip in the line, then the rest of its 5 squares. Either team can cap at any time."
-        >
-          <span className="flex h-6 w-6 items-center justify-center gap-0.5 rounded-full bg-white border border-gray-400">
-            {capMode ? (
-              <span className={`h-3 w-3 rounded-full ${capMode === 'red' ? 'bg-red-600' : 'bg-blue-600'}`} />
-            ) : (
-              <>
-                <span className="h-2 w-2 rounded-full bg-red-600" />
-                <span className="h-2 w-2 rounded-full bg-blue-600" />
-              </>
-            )}
-          </span>
-          {capping ? 'Cancel capping' : 'Cap a score'}
-        </button>
-      </div>
-
-      {capping && (
-        <div className="bg-yellow-900/50 border-2 border-yellow-500 rounded-lg p-2 text-center">
-          <div className="text-yellow-200 font-bold text-sm">
-            {capMode
-              ? `Capping for ${teamName(capMode)}: select 5 squares in a line (${selectedCapCells.length}/5)`
-              : 'Capping: tap a chip in the line you want to cap (red or blue)'}
-          </div>
-          {selectedCapCells.length > 0 && (
-            <button
-              onClick={() => {
-                setSelectedCapCells([])
-                setCapMode(null) // stay in capping; the next chip picks the team again
-              }}
-              className="mt-2 px-4 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded"
-            >
-              Clear selection
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Board: the outline glows in the color of the team whose turn it is */}
       <div
