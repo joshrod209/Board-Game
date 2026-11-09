@@ -20,6 +20,7 @@ import {
   isPlayableFor,
   passTurn,
   turnOptions,
+  drawAndEndTurn,
 } from '../engine'
 
 /** Deterministic RNG so deals are repeatable */
@@ -56,6 +57,11 @@ function expectOk(result: ReturnType<typeof playCard>): GameState {
   return result.state
 }
 
+/** Play a card, then finish the turn with Draw & end turn */
+function playAndEnd(state: GameState, playerId: string, cardId: string, row: number, col: number, joker?: 'add' | 'remove') {
+  return expectOk(drawAndEndTurn(expectOk(playCard(state, playerId, cardId, row, col, joker)), playerId))
+}
+
 // board[0][1] is the 9 of clubs
 const NINE_CLUBS: Card = { suit: 'clubs', rank: '9', id: 'test-9c' }
 const TWO_EYED: Card = { suit: 'diamonds', rank: 'J', id: 'test-jd', wildCardType: 'twoEyedJack' }
@@ -88,16 +94,23 @@ describe('createGame', () => {
 })
 
 describe('playCard', () => {
-  it('places a chip, draws a replacement and passes the turn', () => {
+  it('places a chip, then Draw & end turn draws the replacement and passes the turn', () => {
     const state = withHand(twoPlayer(), 'r1', [NINE_CLUBS])
-    const next = expectOk(playCard(state, 'r1', NINE_CLUBS.id, 0, 1))
-    expect(next.board[0][1].chip).toBe('red')
+    const played = expectOk(playCard(state, 'r1', NINE_CLUBS.id, 0, 1))
+    expect(played.board[0][1].chip).toBe('red')
+    expect(played.hands.r1).toHaveLength(0) // no draw yet
+    expect(played.deck).toHaveLength(state.deck.length)
+    expect(played.discardPile[0]).toMatchObject({ id: NINE_CLUBS.id, playedBy: 'r1' })
+    expect(played.lastMove).toMatchObject({ row: 0, col: 1, kind: 'add', by: 'r1' })
+    expect(currentSeat(played).id).toBe('r1') // turn stays open
+    expect(played.awaitingDraw).toBe(true)
+
+    const next = expectOk(drawAndEndTurn(played, 'r1'))
     expect(next.hands.r1).toHaveLength(1)
     expect(next.hands.r1[0].id).not.toBe(NINE_CLUBS.id)
-    expect(next.discardPile[0]).toMatchObject({ id: NINE_CLUBS.id, playedBy: 'r1' })
     expect(next.deck).toHaveLength(state.deck.length - 1)
     expect(currentSeat(next).id).toBe('b1')
-    expect(next.lastMove).toMatchObject({ row: 0, col: 1, kind: 'add', by: 'r1' })
+    expect(next.awaitingDraw).toBe(false)
   })
 
   it("rejects moves when it isn't your turn", () => {
@@ -119,7 +132,7 @@ describe('playCard', () => {
       const seat = currentSeat(state)
       order.push(seat.id)
       state = withHand(state, seat.id, [JOKER])
-      state = expectOk(playCard(state, seat.id, JOKER.id, 5, 1 + i, 'add'))
+      state = playAndEnd(state, seat.id, JOKER.id, 5, 1 + i, 'add')
       expect(state.board[5][1 + i].chip).toBe(seat.team)
     }
     expect(order).toEqual(['r1', 'b1', 'r2', 'b2', 'r1'])
@@ -131,7 +144,7 @@ describe('playCard', () => {
     state.board[4][4].chip = 'blue'
     expect(playCard(state, 'r1', TWO_EYED.id, 0, 0).ok).toBe(false) // corner joker
     expect(playCard(state, 'r1', TWO_EYED.id, 4, 4).ok).toBe(false) // taken
-    const next = expectOk(playCard(state, 'r1', TWO_EYED.id, 5, 5))
+    const next = playAndEnd(state, 'r1', TWO_EYED.id, 5, 5)
     expect(next.board[5][5].chip).toBe('red')
     expect(currentSeat(next).id).toBe('b1')
   })
@@ -148,7 +161,7 @@ describe('playCard', () => {
     let state = withHand(twoPlayer(), 'r1', [JOKER])
     state = { ...state, board: state.board.map(r => r.map(c => ({ ...c }))) }
     state.board[3][3].chip = 'blue'
-    const next = expectOk(playCard(state, 'r1', JOKER.id, 3, 3, 'remove'))
+    const next = playAndEnd(state, 'r1', JOKER.id, 3, 3, 'remove')
     expect(next.board[3][3].chip).toBeNull()
     expect(currentSeat(next).id).toBe('b1')
   })
@@ -159,7 +172,7 @@ describe('playCard', () => {
     state.board[3][3].chip = 'blue'
     state.board[4][4].chip = 'red'
     expect(playCard(state, 'r1', ONE_EYED.id, 4, 4).ok).toBe(false)
-    const next = expectOk(playCard(state, 'r1', ONE_EYED.id, 3, 3))
+    const next = playAndEnd(state, 'r1', ONE_EYED.id, 3, 3)
     expect(next.board[3][3].chip).toBeNull()
     expect(currentSeat(next).id).toBe('b1')
   })
@@ -178,9 +191,84 @@ describe('playCard', () => {
   it('joker needs an add/remove choice', () => {
     const state = withHand(twoPlayer(), 'r1', [JOKER])
     expect(playCard(state, 'r1', JOKER.id, 5, 5).ok).toBe(false)
-    const next = expectOk(playCard(state, 'r1', JOKER.id, 5, 5, 'add'))
+    const next = playAndEnd(state, 'r1', JOKER.id, 5, 5, 'add')
     expect(next.board[5][5].chip).toBe('red')
     expect(currentSeat(next).id).toBe('b1')
+  })
+})
+
+describe('Draw & end turn', () => {
+  function playedRed(): GameState {
+    // Red makes a 5-in-a-row on row 2 with this play, then is finishing the turn
+    let state = withHand(twoPlayer(), 'r1', [TWO_EYED, NINE_CLUBS])
+    state = { ...state, board: state.board.map(r => r.map(c => ({ ...c }))) }
+    for (const col of [2, 3, 4, 5]) state.board[2][col].chip = 'red'
+    return expectOk(playCard(state, 'r1', TWO_EYED.id, 2, 6))
+  }
+  const LINE = [2, 3, 4, 5, 6].map(col => ({ row: 2, col }))
+
+  it('keeps the turn open: no second card, no burn, no pass', () => {
+    const state = playedRed()
+    expect(state.awaitingDraw).toBe(true)
+    expect(playCard(state, 'r1', NINE_CLUBS.id, 0, 1).ok).toBe(false)
+    expect(burnCard(state, 'r1', NINE_CLUBS.id).ok).toBe(false)
+    expect(passTurn(state, 'r1').ok).toBe(false)
+    expect(turnOptions(state, 'r1')).toMatchObject({ canPlay: false, canBurn: false, canPass: false, mustEndTurn: true })
+  })
+
+  it("the opponent can't move until it ends, so the new line can't be broken first", () => {
+    let state = playedRed()
+    state = withHand(state, 'b1', [ONE_EYED])
+    expect(playCard(state, 'b1', ONE_EYED.id, 2, 4).ok).toBe(false) // not their turn yet
+    expect(drawAndEndTurn(state, 'b1').ok).toBe(false)
+  })
+
+  it('the player can cap during the open turn, then end it', () => {
+    let state = playedRed()
+    state = expectOk(capCells(state, 'r1', LINE))
+    expect(state.cappedScores).toHaveLength(1)
+    expect(currentSeat(state).id).toBe('r1')
+    state = expectOk(drawAndEndTurn(state, 'r1'))
+    expect(currentSeat(state).id).toBe('b1')
+    expect(state.hands.r1).toHaveLength(2)
+  })
+
+  it('capping is never forced: ending the turn without capping leaves the line open', () => {
+    let state = expectOk(drawAndEndTurn(playedRed(), 'r1'))
+    expect(state.cappedScores).toHaveLength(0)
+    // now Blue may break it
+    state = withHand(state, 'b1', [ONE_EYED])
+    state = expectOk(playCard(state, 'b1', ONE_EYED.id, 2, 4))
+    expect(state.board[2][4].chip).toBeNull()
+  })
+
+  it('needs a card to have been played first', () => {
+    const state = withHand(twoPlayer(), 'r1', [NINE_CLUBS])
+    expect(drawAndEndTurn(state, 'r1').ok).toBe(false)
+  })
+
+  it('with an empty deck it ends the turn without drawing', () => {
+    let state = withHand(twoPlayer(), 'r1', [NINE_CLUBS])
+    state = { ...state, deck: [] }
+    state = playAndEnd(state, 'r1', NINE_CLUBS.id, 0, 1)
+    expect(state.hands.r1).toHaveLength(0)
+    expect(currentSeat(state).id).toBe('b1')
+  })
+
+  it('everyone can see that the current player is finishing their turn', () => {
+    const state = playedRed()
+    expect(viewFor(state, 'r1').awaitingDraw).toBe(true)
+    expect(viewFor(state, 'b1').awaitingDraw).toBe(true)
+    expect(viewFor(state, 'b1').canPass).toBe(false)
+  })
+
+  it('burning still keeps the turn and draws straight away', () => {
+    let state = withHand(twoPlayer(), 'r1', [NINE_CLUBS, { ...NINE_CLUBS, id: 'nine-2' }])
+    state = { ...state, board: state.board.map(r => r.map(c => ({ ...c, chip: c.isCorner ? null : c.rank === '9' && c.suit === 'clubs' ? 'blue' : c.chip }))) }
+    state = expectOk(burnCard(state, 'r1', NINE_CLUBS.id))
+    expect(state.hands.r1).toHaveLength(2)
+    expect(state.awaitingDraw).toBe(false)
+    expect(currentSeat(state).id).toBe('r1')
   })
 })
 

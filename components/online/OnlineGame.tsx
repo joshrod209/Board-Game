@@ -26,6 +26,8 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
   const farSide = game.seats.length === 4 ? mySeat >= 2 : mySeat === 1
   const current = game.seats.find(s => s.id === game.currentPlayerId)!
   const myTurn = game.currentPlayerId === game.you && !game.winner
+  // You've played a card and are finishing your turn: cap if you want, then Draw & end turn
+  const finishing = myTurn && game.awaitingDraw
 
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null)
   const [jokerAction, setJokerAction] = useState<'add' | 'remove' | null>(null)
@@ -33,6 +35,14 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
   const [capSelection, setCapSelection] = useState<CellPos[]>([])
   const [toast, setToast] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  // Gentle reminder if Draw & end turn hasn't been tapped after a few seconds
+  const [nudgeEndTurn, setNudgeEndTurn] = useState(false)
+  useEffect(() => {
+    setNudgeEndTurn(false)
+    if (!finishing) return
+    const t = setTimeout(() => setNudgeEndTurn(true), 8000)
+    return () => clearTimeout(t)
+  }, [finishing, game.lastMove])
   const [winnerDismissed, setWinnerDismissed] = useState(false)
   const justCapped = useRef(false)
 
@@ -106,6 +116,7 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
 
     if (game.winner) return
     if (!myTurn) return setToast(`It's ${current.name}'s turn`)
+    if (finishing) return setToast('You already played a card. Cap any lines you want, then tap Draw & end turn.')
     if (!selectedCard) return setToast('Pick a card from your hand first')
     if (selectedCard.wildCardType === 'joker' && !jokerAction) return setToast('Choose Add or Remove for the Joker first')
     send({
@@ -163,6 +174,32 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
       })),
   })
 
+  // After playing: draw the replacement card and pass play on (the player decides when)
+  const endTurnButton = finishing ? (
+    <button
+      onClick={() => {
+        setCapMode(false)
+        setCapSelection([])
+        send({ type: 'endTurn' })
+      }}
+      disabled={pending}
+      className={`rounded px-3 py-1 text-xs font-bold text-gray-900 bg-yellow-400 hover:bg-yellow-300 disabled:opacity-60 shadow ${
+        nudgeEndTurn ? 'animate-pulse ring-2 ring-yellow-200' : ''
+      }`}
+      title="Draw your replacement card and pass the turn"
+    >
+      Draw &amp; end turn ▶
+    </button>
+  ) : null
+
+  const finishNotice = finishing ? (
+    <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2 py-1.5 text-xs text-yellow-100">
+      {nudgeEndTurn
+        ? 'Tap Draw & end turn when you’re done.'
+        : 'Your chip is down. Cap any lines you made, then tap Draw & end turn.'}
+    </div>
+  ) : null
+
   // "Cap a score" lives in the hand box's action row (more room for the board)
   const capButton = (
     <button
@@ -214,7 +251,17 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
         <Scoreboard
           red={teamInfo('red')}
           blue={teamInfo('blue')}
-          status={winnerTeam ? `${winnerTeam === 'red' ? 'Red' : 'Blue'} wins!` : myTurn ? 'Your turn!' : `${current.name}'s turn`}
+          status={
+            winnerTeam
+              ? `${winnerTeam === 'red' ? 'Red' : 'Blue'} wins!`
+              : finishing
+                ? 'Cap or end your turn'
+                : myTurn
+                  ? 'Your turn!'
+                  : game.awaitingDraw
+                    ? `${current.name} is finishing their turn`
+                    : `${current.name}'s turn`
+          }
           statusTone={winnerTeam ? 'win' : myTurn ? 'you' : current.team}
           lastEvent={game.lastEvent}
         />
@@ -227,7 +274,7 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
           onCardSelect={onCardSelect}
           onBurnCard={() => selectedCard && send({ type: 'burn', cardId: selectedCard.id })}
           onJokerActionSelect={setJokerAction}
-          disabled={capMode || !!game.winner}
+          disabled={capMode || finishing || !!game.winner}
           playerColor={myTeam}
           canBurn={canBurn}
           hasBurned={myTurn && game.hasBurnedThisTurn}
@@ -237,8 +284,13 @@ export default function OnlineGame({ room, game, onLeave }: Props) {
           onPass={() => send({ type: 'pass' })}
           orderKey={`${room.code}:${game.you}`}
           persistOrder
-          actions={capButton}
-          notice={capNotice}
+          actions={
+            <>
+              {endTurnButton}
+              {capButton}
+            </>
+          }
+          notice={capNotice ?? finishNotice}
           pile={
             <PileStrip
               players={game.seats}

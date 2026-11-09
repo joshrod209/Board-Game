@@ -16,6 +16,7 @@ import {
   playCard,
   burnCard,
   passTurn,
+  drawAndEndTurn,
   capCells,
   shuffleAndDeal,
   newGame,
@@ -152,6 +153,8 @@ function applyAction(room: Room, playerId: string, action: GameAction): EngineRe
       return burnCard(game, playerId, String(action.cardId))
     case 'pass':
       return passTurn(game, playerId)
+    case 'endTurn':
+      return drawAndEndTurn(game, playerId)
     case 'cap':
       if (!Array.isArray(action.cells)) return { ok: false, error: 'Bad cap request' }
       return capCells(

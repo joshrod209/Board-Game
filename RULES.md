@@ -53,6 +53,15 @@ Board Game is a custom Sequence-style board game played on a 10×10 custom board
 - Red starts the first game; the starting seat rotates each new game
 - A player may cap their own team's scores at any time, even on another player's turn
 
+### A Turn, Step by Step
+1. **Play one card** (or burn a dead card first, or pass if no regular card fits)
+2. **Cap any lines you made** — optional and entirely up to you; the game never caps or points out scores for you
+3. **Draw & end turn** — draws your replacement card and passes play on
+- Until you tap Draw & end turn, nobody else can move, so a line you just finished can't be broken before you've had the chance to cap it
+- If you end your turn without capping, the line stays open and the next player may break it
+- After playing a card you can't play a second card, burn, or pass — only cap or end the turn
+- **File**: `gameCore/engine.ts` (`playCard`, `drawAndEndTurn`)
+
 ### Chip Placement
 - Players place chips by clicking empty cells
 - Must match the card in your hand to the board position
@@ -63,7 +72,7 @@ Board Game is a custom Sequence-style board game played on a 10×10 custom board
 
 #### Wild Cards
 - **File**: `gameCore/jokerLogic.ts`
-- Every wild card play ends your turn.
+- Every wild card play is a normal card play: finish with Draw & end turn.
 - **Two-eyed Jack** (♦ and ♣): place your chip on any open square, except a corner Joker space or a square that's already taken
 - **One-eyed Jack** (♥ and ♠): remove any opponent chip that isn't capped
 - **Joker card**: choose one: add a chip like a two-eyed Jack, OR remove a chip like a one-eyed Jack
@@ -72,7 +81,7 @@ Board Game is a custom Sequence-style board game played on a 10×10 custom board
 #### Burn Rule
 - **File**: `gameCore/engine.ts` (`burnCard`, `isPlayableFor`)
 - Once per turn, if a card in your hand can't be played anywhere on the board, you may burn it: discard it and draw a new card
-- Your turn continues after burning, so you can play the new card (or another card)
+- Burning draws the new card straight away, and your turn continues so you can play it (or another card)
 - A one-eyed Jack counts as unplayable when there's no uncapped opponent chip to remove
 - Burning is optional
 

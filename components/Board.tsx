@@ -63,6 +63,9 @@ export default function Board() {
   const [blueHand, setBlueHand] = useState<Hand | null>(null)
   const [selectedCard, setSelectedCard] = useState<Card | null>(null) // Currently selected card for playing
   const [hasBurnedThisTurn, setHasBurnedThisTurn] = useState(false) // Track if current player has burned this turn
+  // A card has been played: the player can cap lines, then "Draw & end turn" draws and passes play
+  const [awaitingDraw, setAwaitingDraw] = useState(false)
+  const [nudgeEndTurn, setNudgeEndTurn] = useState(false)
   const [jokerActionMode, setJokerActionMode] = useState<'add' | 'remove' | null>(null) // For joker cards: which action to take
   const [discardPile, setDiscardPile] = useState<DiscardedCard[]>([]) // Discarded cards (most recent first)
   const [lastMove, setLastMove] = useState<{ row: number; col: number } | null>(null) // Square of the latest play (pulses)
@@ -108,6 +111,7 @@ export default function Board() {
    */
   const handleCardSelect = (card: Card) => {
     // Only allow selecting cards if it's the current player's turn and not in cap mode
+    if (awaitingDraw) return // already played this turn
     if (capMode || capArmed) {
       debugLog('Cannot select cards while in cap mode')
       return
@@ -140,6 +144,10 @@ export default function Board() {
    * Handle burning a card (discard unplayable card and draw new one)
    */
   const handleBurnCard = () => {
+    if (awaitingDraw) {
+      setToast('You already played a card. Cap any lines you want, then tap Draw & end turn.')
+      return
+    }
     if (!selectedCard) {
       debugLog('No card selected to burn')
       setToast('Select the card you want to burn first')
@@ -327,6 +335,7 @@ export default function Board() {
     setBlueHand(newBlueHand)
     setSelectedCard(null) // Clear any selected card
     setHasBurnedThisTurn(false) // Reset burn status
+    setAwaitingDraw(false) // Fresh deal: nobody is mid-turn
     setJokerActionMode(null) // Reset joker action mode
     setDiscardPile([]) // Reset discard pile
     
@@ -702,6 +711,10 @@ export default function Board() {
     }
     
     // Normal chip placement - requires card selection and validation
+    if (awaitingDraw) {
+      setToast('You already played a card. Cap any lines you want, then tap Draw & end turn.')
+      return
+    }
     const cell = board[row][col]
     
     // Require a selected card before placing chip
@@ -775,10 +788,8 @@ export default function Board() {
       setSelectedCard(null)
       setJokerActionMode(null)
       
-      // Draw new card and END TURN (two-eyed jack ends turn)
-      drawCardForPlayer(currentPlayer, updatedHand)
-      setCurrentPlayer(currentPlayer === 'red' ? 'blue' : 'red')
-      setHasBurnedThisTurn(false)
+      // Chip is down: the player caps if they want, then taps Draw & end turn
+      setAwaitingDraw(true)
       return
     }
     
@@ -834,12 +845,8 @@ export default function Board() {
       setSelectedCard(null)
       setJokerActionMode(null)
       
-      // Draw new card and END TURN (one-eyed jack ends turn)
-      drawCardForPlayer(currentPlayer, updatedHand)
-      const nextPlayer: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
-      setCurrentPlayer(nextPlayer)
-      setHasBurnedThisTurn(false)
-      setJokerActionMode(null)
+      // Chip removed: finish with Draw & end turn
+      setAwaitingDraw(true)
       return
     }
     
@@ -905,12 +912,8 @@ export default function Board() {
         setSelectedCard(null)
         setJokerActionMode(null)
         
-        // Draw new card and END TURN (joker ends turn)
-        drawCardForPlayer(currentPlayer, updatedHand)
-        const nextPlayer: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
-        setCurrentPlayer(nextPlayer)
-        setHasBurnedThisTurn(false)
-        setJokerActionMode(null)
+        // Finish with Draw & end turn
+        setAwaitingDraw(true)
         return
       } else {
         // Joker: remove opponent chip
@@ -964,12 +967,8 @@ export default function Board() {
         setSelectedCard(null)
         setJokerActionMode(null)
         
-        // Draw new card and END TURN (joker ends turn)
-        drawCardForPlayer(currentPlayer, updatedHand)
-        const nextPlayer: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
-        setCurrentPlayer(nextPlayer)
-        setHasBurnedThisTurn(false)
-        setJokerActionMode(null)
+        // Finish with Draw & end turn
+        setAwaitingDraw(true)
         return
       }
     }
@@ -988,7 +987,6 @@ export default function Board() {
     // All validation passed - proceed with chip placement
     // Capture current player before state update
     const playerToPlace = currentPlayer
-    const nextPlayer: ChipColor = currentPlayer === 'red' ? 'blue' : 'red'
     
     // Remove card from hand
     const removedCard = currentHand.removeCard(selectedCard.id)
@@ -1036,23 +1034,42 @@ export default function Board() {
     // Clear selected card
     setSelectedCard(null)
     
-    // Draw a new card for the player who just played (before switching turns)
-    // Pass the updatedHand to avoid using stale state
-    drawCardForPlayer(playerToPlace, updatedHand)
-    
-    // Toggle turns: red → blue → red → blue
-    setCurrentPlayer(nextPlayer)
-    // Reset burn status and joker action mode for new player's turn
-    setHasBurnedThisTurn(false)
+    // The turn stays open: the player can cap, then taps Draw & end turn
+    setAwaitingDraw(true)
     setJokerActionMode(null)
   }
+  
+  /**
+   * Draw & end turn: draw the replacement card for the card just played and
+   * pass play to the other team. Capping before this is up to the player.
+   */
+  const handleDrawAndEndTurn = () => {
+    if (!awaitingDraw || winner) return
+    drawCardForPlayer(currentPlayer)
+    setSelectedCard(null)
+    setJokerActionMode(null)
+    setCapArmed(false)
+    setCapMode(null)
+    setSelectedCapCells([])
+    setHasBurnedThisTurn(false)
+    setAwaitingDraw(false)
+    setCurrentPlayer(currentPlayer === 'red' ? 'blue' : 'red')
+  }
+  
+  // Gentle reminder if Draw & end turn hasn't been tapped after a few seconds
+  useEffect(() => {
+    setNudgeEndTurn(false)
+    if (!awaitingDraw) return
+    const t = setTimeout(() => setNudgeEndTurn(true), 8000)
+    return () => clearTimeout(t)
+  }, [awaitingDraw, lastMove])
   
   /**
    * Pass: allowed when none of the current player's regular cards can be
    * played (wild cards are optional; burning first is optional too).
    */
   const handlePass = () => {
-    if (winner || capMode || capArmed) return
+    if (winner || capMode || capArmed || awaitingDraw) return
     const hand = getCurrentPlayerHand()?.cards ?? []
     if (!canPassWith(hand, board, currentPlayer as Team)) {
       setToast('You have a regular card you can play, so you cannot pass')
@@ -1159,6 +1176,27 @@ export default function Board() {
     </button>
   )
 
+  // After playing: draw the replacement card and pass play on (the player decides when)
+  const endTurnButton = awaitingDraw && !winner ? (
+    <button
+      onClick={handleDrawAndEndTurn}
+      className={`rounded px-3 py-1 text-xs font-bold text-gray-900 bg-yellow-400 hover:bg-yellow-300 shadow ${
+        nudgeEndTurn ? 'animate-pulse ring-2 ring-yellow-200' : ''
+      }`}
+      title="Draw your replacement card and pass the turn"
+    >
+      Draw &amp; end turn ▶
+    </button>
+  ) : null
+
+  const finishNotice = awaitingDraw && !winner ? (
+    <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2 py-1.5 text-xs text-yellow-100">
+      {nudgeEndTurn
+        ? 'Tap Draw & end turn when you’re done.'
+        : 'Your chip is down. Cap any lines you made, then tap Draw & end turn.'}
+    </div>
+  ) : null
+
   const capNotice = capping ? (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-yellow-500/60 bg-yellow-900/40 px-2 py-1.5">
       <span className="text-xs font-semibold text-yellow-200">
@@ -1186,7 +1224,13 @@ export default function Board() {
       <Scoreboard
         red={{ score: scoreCounts.red, active: currentPlayer === 'red' && !winner, won: winner === 'red' }}
         blue={{ score: scoreCounts.blue, active: currentPlayer === 'blue' && !winner, won: winner === 'blue' }}
-        status={winner ? `${teamName(winner)} wins!` : `${teamName(currentPlayer)}'s turn`}
+        status={
+          winner
+            ? `${teamName(winner)} wins!`
+            : awaitingDraw
+              ? `${teamName(currentPlayer)}: cap or end turn`
+              : `${teamName(currentPlayer)}'s turn`
+        }
         statusTone={winner ? 'win' : currentPlayer === 'red' ? 'red' : 'blue'}
         lastEvent={lastEvent}
       />
@@ -1198,7 +1242,7 @@ export default function Board() {
         onCardSelect={onCardSelect}
         onBurnCard={handleBurnCard}
         onJokerActionSelect={(action: 'add' | 'remove') => setJokerActionMode(action)}
-        disabled={capping || !!winner}
+        disabled={capping || awaitingDraw || !!winner}
         playerColor={currentPlayer === 'red' || currentPlayer === 'blue' ? currentPlayer : 'red'}
         canBurn={deckCount > 0}
         canPass={!winner && canPassWith(getCurrentPlayerHand()?.cards ?? [], board, currentPlayer as Team)}
@@ -1208,8 +1252,13 @@ export default function Board() {
         jokerActionMode={jokerActionMode}
         orderKey={currentPlayer}
         title={`${teamName(currentPlayer)}'s hand`}
-        actions={capButton}
-        notice={capNotice}
+        actions={
+          <>
+            {endTurnButton}
+            {capButton}
+          </>
+        }
+        notice={capNotice ?? finishNotice}
         pile={
           <PileStrip
             players={PILE_PLAYERS}

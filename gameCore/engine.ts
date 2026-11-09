@@ -52,6 +52,13 @@ export type GameState = {
   turnIndex: number
   startingIndex: number
   hasBurnedThisTurn: boolean
+  /**
+   * The current player has played a card and is finishing their turn: they
+   * may cap lines, then "Draw & end turn" draws their replacement card and
+   * passes play on. Until then nobody else can move, so a line can't be
+   * broken before its owner has had the chance to cap it.
+   */
+  awaitingDraw: boolean
   winner: Team | null
   lastMove: LastMove | null
   /** Short description of the latest action, shown to everyone */
@@ -134,6 +141,7 @@ export function createGame(seats: Seat[], rng: Rng = Math.random, startingIndex 
     turnIndex: startingIndex % seats.length,
     startingIndex: startingIndex % seats.length,
     hasBurnedThisTurn: false,
+    awaitingDraw: false,
     winner: null,
     lastMove: null,
     lastEvent: null,
@@ -194,14 +202,26 @@ function endTurn(state: GameState): GameState {
     ...state,
     turnIndex: (state.turnIndex + 1) % state.seats.length,
     hasBurnedThisTurn: false,
+    awaitingDraw: false,
   }
 }
 
-/** Remove a card from the player's hand, discard it, and draw a replacement */
-function spendCard(state: GameState, playerId: string, card: Card): GameState {
+/** Draw the top card of the deck into a player's hand (if any are left) */
+function drawCard(state: GameState, playerId: string): GameState {
+  const deck = [...state.deck]
+  const drawn = deck.pop()
+  if (!drawn) return state
+  return { ...state, deck, hands: { ...state.hands, [playerId]: [...state.hands[playerId], drawn] } }
+}
+
+/**
+ * Remove a card from the player's hand and discard it. Burning draws the
+ * replacement straight away; playing waits for "Draw & end turn".
+ */
+function spendCard(state: GameState, playerId: string, card: Card, draw: boolean): GameState {
   const deck = [...state.deck]
   const hand = state.hands[playerId].filter(c => c.id !== card.id)
-  const drawn = deck.pop()
+  const drawn = draw ? deck.pop() : undefined
   if (drawn) hand.push(drawn)
   return {
     ...state,
@@ -251,13 +271,17 @@ export function turnOptions(state: GameState, playerId: string) {
   const team = seat?.team ?? 'red'
   const unplayable = hand.filter(c => !isPlayableFor(c, state.board, team))
   return {
-    canPlay: unplayable.length < hand.length,
+    canPlay: !state.awaitingDraw && unplayable.length < hand.length,
     /** Once per turn, swap a card that can't go anywhere for a new one */
-    canBurn: !state.hasBurnedThisTurn && state.deck.length > 0 && unplayable.length > 0,
+    canBurn: !state.awaitingDraw && !state.hasBurnedThisTurn && state.deck.length > 0 && unplayable.length > 0,
     /** No regular card fits (wild cards are optional), so the player may pass */
-    canPass: seat !== undefined && canPassWith(hand, state.board, team),
+    canPass: !state.awaitingDraw && seat !== undefined && canPassWith(hand, state.board, team),
+    /** A card has been played; finish with "Draw & end turn" */
+    mustEndTurn: state.awaitingDraw,
   }
 }
+
+const ALREADY_PLAYED = 'You already played a card. Cap any lines you want, then tap Draw & end turn.'
 
 function checkTurn(state: GameState, playerId: string): string | null {
   if (state.winner) return 'The game is over'
@@ -276,6 +300,7 @@ export function playCard(
 ): EngineResult {
   const turnError = checkTurn(state, playerId)
   if (turnError) return { ok: false, error: turnError }
+  if (state.awaitingDraw) return { ok: false, error: ALREADY_PLAYED }
 
   const seat = seatOf(state, playerId)!
   const card = state.hands[playerId]?.find(c => c.id === cardId)
@@ -284,7 +309,7 @@ export function playCard(
   const team = seat.team
   const opponent = otherTeam(team)
 
-  // Every card play ends the turn:
+  // Every card play finishes with "Draw & end turn":
   // - two-eyed jack: add a chip on any empty, non-corner square
   // - one-eyed jack: remove any uncapped opponent chip
   // - joker: either of the above
@@ -319,21 +344,37 @@ export function playCard(
       ? setCell(state.board, row, col, { chip: team })
       : setCell(state.board, row, col, { chip: null, scoreIds: [] })
 
-  let next = spendCard({ ...state, board }, playerId, card)
-  next = {
-    ...next,
-    lastMove: { row, col, kind: action, by: playerId },
-    lastEvent:
-      action === 'add'
-        ? `${seat.name} played ${cardLabel(card)}`
-        : `${seat.name} removed a ${opponent} chip with ${cardLabel(card)}`,
+  const next = spendCard({ ...state, board }, playerId, card, false)
+  return {
+    ok: true,
+    state: {
+      ...next,
+      awaitingDraw: true,
+      lastMove: { row, col, kind: action, by: playerId },
+      lastEvent:
+        action === 'add'
+          ? `${seat.name} played ${cardLabel(card)}`
+          : `${seat.name} removed a ${opponent} chip with ${cardLabel(card)}`,
+    },
   }
-  return { ok: true, state: endTurn(next) }
+}
+
+/**
+ * Finish the turn after playing a card: draw the replacement card (if the
+ * deck has any) and pass play to the next seat. Capping is up to the player
+ * beforehand; nothing is capped automatically.
+ */
+export function drawAndEndTurn(state: GameState, playerId: string): EngineResult {
+  const turnError = checkTurn(state, playerId)
+  if (turnError) return { ok: false, error: turnError }
+  if (!state.awaitingDraw) return { ok: false, error: 'Play a card first (or pass if nothing fits)' }
+  return { ok: true, state: endTurn(drawCard(state, playerId)) }
 }
 
 export function burnCard(state: GameState, playerId: string, cardId: string): EngineResult {
   const turnError = checkTurn(state, playerId)
   if (turnError) return { ok: false, error: turnError }
+  if (state.awaitingDraw) return { ok: false, error: ALREADY_PLAYED }
   if (state.hasBurnedThisTurn) return { ok: false, error: 'You can only burn one card per turn' }
 
   const card = state.hands[playerId]?.find(c => c.id === cardId)
@@ -344,7 +385,7 @@ export function burnCard(state: GameState, playerId: string, cardId: string): En
   if (state.deck.length === 0) return { ok: false, error: 'The deck is empty' }
 
   const seat = seatOf(state, playerId)!
-  const next = spendCard(state, playerId, card)
+  const next = spendCard(state, playerId, card, true)
   return {
     ok: true,
     state: { ...next, hasBurnedThisTurn: true, lastEvent: `${seat.name} burned ${cardLabel(card)}` },
@@ -358,6 +399,7 @@ export function burnCard(state: GameState, playerId: string, cardId: string): En
 export function passTurn(state: GameState, playerId: string): EngineResult {
   const turnError = checkTurn(state, playerId)
   if (turnError) return { ok: false, error: turnError }
+  if (state.awaitingDraw) return { ok: false, error: 'You already played a card, so tap Draw & end turn instead' }
   if (!turnOptions(state, playerId).canPass) {
     return { ok: false, error: 'You have a regular card you can play, so you cannot pass' }
   }
@@ -546,6 +588,8 @@ export type PlayerView = {
   cappedScores: Score[]
   currentPlayerId: string
   hasBurnedThisTurn: boolean
+  /** The current player has played and is finishing their turn (capping, then Draw & end turn) */
+  awaitingDraw: boolean
   /** True on your turn when no regular card in your hand can be played */
   canPass: boolean
   winner: Team | null
@@ -564,6 +608,7 @@ export function viewFor(state: GameState, playerId: string): PlayerView {
     cappedScores: state.cappedScores,
     currentPlayerId: currentSeat(state).id,
     hasBurnedThisTurn: state.hasBurnedThisTurn,
+    awaitingDraw: state.awaitingDraw,
     canPass: currentSeat(state).id === playerId && !state.winner && turnOptions(state, playerId).canPass,
     winner: state.winner,
     lastMove: state.lastMove,
