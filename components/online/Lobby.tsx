@@ -24,8 +24,13 @@ export default function Lobby({ room, playerId, onLeave }: { room: RoomUpdate; p
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [link, setLink] = useState('')
+  // Phones (and some browsers) can hand the invite to Messages and other apps
+  const [canShare, setCanShare] = useState(false)
 
-  useEffect(() => setLink(`${window.location.origin}/room/${room.code}`), [room.code])
+  useEffect(() => {
+    setLink(`${window.location.origin}/room/${room.code}`)
+    setCanShare(typeof navigator.share === 'function')
+  }, [room.code])
 
   const isHost = room.hostId === playerId
   const me = room.players.find(p => p.id === playerId)
@@ -36,6 +41,17 @@ export default function Lobby({ room, playerId, onLeave }: { room: RoomUpdate; p
     setError(null)
     const res = await action()
     if (!res.ok) setError(res.error ?? 'Something went wrong')
+  }
+
+  /** Open the share sheet with a short message; Messages shows the link's preview card */
+  async function shareInvite() {
+    const from = me?.name ? `${me.name} invited you` : "You're invited"
+    try {
+      await navigator.share({ title: 'Board Game', text: `${from} to play The Board Game! Game code ${room.code}`, url: link })
+    } catch (e) {
+      // Closing the share sheet isn't an error; anything else falls back to copying
+      if ((e as Error)?.name !== 'AbortError') copyLink()
+    }
   }
 
   async function copyLink() {
@@ -65,6 +81,11 @@ export default function Lobby({ room, playerId, onLeave }: { room: RoomUpdate; p
             onFocus={e => e.target.select()}
             className="flex-1 min-w-0 rounded-lg bg-gray-900 border border-gray-700 px-3 py-2 text-xs text-gray-300"
           />
+          {canShare && (
+            <button onClick={shareInvite} className="rounded-lg bg-yellow-500 hover:bg-yellow-400 px-3 py-2 text-sm font-semibold text-gray-900">
+              Share invite
+            </button>
+          )}
           <button onClick={copyLink} className="rounded-lg bg-gray-700 hover:bg-gray-600 px-3 py-2 text-sm text-white">
             {copied ? 'Copied!' : 'Copy link'}
           </button>
